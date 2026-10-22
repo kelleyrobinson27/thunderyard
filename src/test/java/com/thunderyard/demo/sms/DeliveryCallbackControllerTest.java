@@ -1,6 +1,7 @@
 package com.thunderyard.demo.sms;
 
 import com.thunderyard.demo.notifications.Notification;
+import com.thunderyard.demo.notifications.NotificationMetrics;
 import com.thunderyard.demo.notifications.NotificationRepository;
 import org.junit.jupiter.api.Test;
 
@@ -12,8 +13,9 @@ import static org.mockito.Mockito.*;
 class DeliveryCallbackControllerTest {
 
     private final NotificationRepository repo = mock(NotificationRepository.class);
+    private final NotificationMetrics metrics = mock(NotificationMetrics.class);
     private final DeliveryCallbackController controller =
-            new DeliveryCallbackController(repo);
+            new DeliveryCallbackController(repo, metrics);
 
     @Test
     void marksDelivered() {

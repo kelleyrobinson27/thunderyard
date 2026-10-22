@@ -19,6 +19,8 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
 
+                        .requestMatchers("/actuator/**").permitAll()
+
                         // Allow GET /events
                         .requestMatchers(HttpMethod.GET, "/events/**").permitAll()
 

@@ -2,6 +2,8 @@ package com.thunderyard.demo.events;
 
 import com.thunderyard.demo.events.persistence.EventStore;
 import com.thunderyard.demo.events.persistence.EventRepository;
+import com.thunderyard.demo.notifications.Notification;
+import com.thunderyard.demo.notifications.NotificationMetrics;
 import com.thunderyard.demo.notifications.NotificationRepository;
 import org.junit.jupiter.api.Test;
 
@@ -20,9 +22,10 @@ class EventPersistenceIntegrationTest {
 
     // EventStore MUST be mocked, not real
     private final EventStore eventStore = mock(EventStore.class);
+    private final NotificationMetrics metrics = mock(NotificationMetrics.class);
 
     private final AppointmentEventListener listener =
-            new AppointmentEventListener(notificationRepo, easClient, smsProducer, eventStore);
+            new AppointmentEventListener(notificationRepo, easClient, smsProducer, eventStore, metrics);
 
     @Test
     void listenerPersistsEventBeforeProcessing() {
@@ -46,6 +49,7 @@ class EventPersistenceIntegrationTest {
                         new AppointmentDetails(appointmentId, "Dr. Who", "2026-10-20", true)
                 )
         );
+        when(notificationRepo.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
 
         listener.handleEvent(evt);
 

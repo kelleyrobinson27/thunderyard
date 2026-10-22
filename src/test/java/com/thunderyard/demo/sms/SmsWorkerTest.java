@@ -1,6 +1,7 @@
 package com.thunderyard.demo.sms;
 
 import com.thunderyard.demo.notifications.Notification;
+import com.thunderyard.demo.notifications.NotificationMetrics;
 import com.thunderyard.demo.notifications.NotificationRepository;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -16,8 +17,9 @@ class SmsWorkerTest {
     private final SmsProviderClient provider = mock(SmsProviderClient.class);
     private final NotificationRepository repo = mock(NotificationRepository.class);
     private final KafkaTemplate<String, SmsJob> kafka = mock(KafkaTemplate.class);
+    private final NotificationMetrics metrics = mock(NotificationMetrics.class);
 
-    private final SmsWorker worker = new SmsWorker(provider, repo, kafka);
+    private final SmsWorker worker = new SmsWorker(provider, repo, kafka, metrics);
 
     @Test
     void marksNotificationSentOnSuccess() {

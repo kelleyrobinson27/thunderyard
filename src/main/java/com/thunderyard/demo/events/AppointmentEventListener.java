@@ -2,6 +2,7 @@ package com.thunderyard.demo.events;
 
 import com.thunderyard.demo.config.KafkaTopics;
 import com.thunderyard.demo.notifications.Notification;
+import com.thunderyard.demo.notifications.NotificationMetrics;
 import com.thunderyard.demo.notifications.NotificationRepository;
 import com.thunderyard.demo.events.persistence.EventStore;
 import org.slf4j.Logger;
@@ -19,16 +20,19 @@ public class AppointmentEventListener {
     private final NotificationRepository notificationRepository;
     private final EasClient easClient;
     private final SmsQueueProducer smsQueueProducer;
-    private final EventStore eventStore;   // <-- NEW
+    private final EventStore eventStore;
+    private final NotificationMetrics metrics;
 
     public AppointmentEventListener(NotificationRepository notificationRepository,
                                     EasClient easClient,
                                     SmsQueueProducer smsQueueProducer,
-                                    EventStore eventStore) {   // <-- NEW
+                                    EventStore eventStore,
+                                    NotificationMetrics metrics) {
         this.notificationRepository = notificationRepository;
         this.easClient = easClient;
         this.smsQueueProducer = smsQueueProducer;
-        this.eventStore = eventStore;      // <-- NEW
+        this.eventStore = eventStore;
+        this.metrics = metrics;
     }
 
     @KafkaListener(topics = KafkaTopics.APPOINTMENT_EVENTS, groupId = "notification-service")
@@ -40,7 +44,8 @@ public class AppointmentEventListener {
         // 1. Idempotency check
         Optional<Notification> existing = notificationRepository.findByEventId(event.eventId());
         if (existing.isPresent()) {
-            return; // duplicate event, already processed
+            metrics.duplicated();
+            return;
         }
 
         // 2. Fetch appointment details from EAS (WebClient returns CompletableFuture)
@@ -56,6 +61,7 @@ public class AppointmentEventListener {
             suppressed.setPatientId(event.patientId());
             suppressed.setStatus(Notification.Status.SUPPRESSED);
             notificationRepository.save(suppressed);
+            metrics.suppressed();
             return;
         }
 
@@ -68,6 +74,7 @@ public class AppointmentEventListener {
         notification = notificationRepository.save(notification);
 
         smsQueueProducer.publishSmsJob(notification);
+        metrics.queued();
     }
 
     private boolean shouldNotify(AppointmentChangedEvent event, AppointmentDetails appointment) {

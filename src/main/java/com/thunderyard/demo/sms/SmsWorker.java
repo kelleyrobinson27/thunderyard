@@ -2,6 +2,7 @@ package com.thunderyard.demo.sms;
 
 import com.thunderyard.demo.config.KafkaTopics;
 import com.thunderyard.demo.notifications.Notification;
+import com.thunderyard.demo.notifications.NotificationMetrics;
 import com.thunderyard.demo.notifications.NotificationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,13 +20,16 @@ public class SmsWorker {
     private final SmsProviderClient smsProviderClient;
     private final NotificationRepository notificationRepository;
     private final KafkaTemplate<String, SmsJob> kafkaTemplate;
+    private final NotificationMetrics metrics;
 
     public SmsWorker(SmsProviderClient smsProviderClient,
                      NotificationRepository notificationRepository,
-                     KafkaTemplate<String, SmsJob> kafkaTemplate) {
+                     KafkaTemplate<String, SmsJob> kafkaTemplate,
+                     NotificationMetrics metrics) {
         this.smsProviderClient = smsProviderClient;
         this.notificationRepository = notificationRepository;
         this.kafkaTemplate = kafkaTemplate;
+        this.metrics = metrics;
     }
 
     @KafkaListener(topics = KafkaTopics.SMS_JOBS, groupId = "notification-service")
@@ -48,13 +52,14 @@ public class SmsWorker {
             if (success) {
                 notification.setStatus(Notification.Status.SENT);
                 notificationRepository.save(notification);
+                metrics.sent();
                 return;
             }
 
-            // 3. Permanent failure (provider returned false)
             notification.setStatus(Notification.Status.FAILED);
             notification.setFailureReason("Provider returned failure");
             notificationRepository.save(notification);
+            metrics.failed();
 
         } catch (Exception ex) {
 
@@ -68,6 +73,7 @@ public class SmsWorker {
                 kafkaTemplate.send(KafkaTopics.SMS_JOBS, job.getCorrelationId(), retryJob);
                 notification.setStatus(Notification.Status.RETRIED);
                 notificationRepository.save(notification);
+                metrics.retried();
                 return;
             }
 
@@ -77,6 +83,7 @@ public class SmsWorker {
             notification.setStatus(Notification.Status.FAILED);
             notification.setFailureReason("Retries exhausted");
             notificationRepository.save(notification);
+            metrics.failed();
         }
     }
 }

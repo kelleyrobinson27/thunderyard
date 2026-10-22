@@ -173,6 +173,7 @@ Ready-made scripts in `src/test/curl/`:
 - `runAll2Kafka.sh` — SMS queue path (CREATED / duplicate / UPDATED / CANCELLED); needs Kafka
 - `runAll3Eas.sh` — EAS opt-in vs reserved opt-out `appointmentId`
 - `runAll4Sms.sh` — SMS success vs retryable timeout vs permanent failure (needs Kafka)
+- `runAll5Metrics.sh` — scrape `/actuator/prometheus` for notification counters
 
 ### Event log and replay
 
@@ -232,7 +233,8 @@ Consumer group: `notification-service`. Multiple pods can share the group; idemp
 | Opt-in | `AppointmentDetails.canNotify` from EAS; cancel events suppressed |
 | Minimal PHI | Mock phone/message; avoid logging full payloads in production |
 | Auth | HTTP Basic for the demo; production would use TLS, JWT, workload identity |
-| Health | Spring Boot Actuator on the classpath |
+| Health | Actuator `health`, `metrics`, `prometheus` at `/actuator/**` |
+| Metrics | `notifications_queued/sent/delivered/failed/retried/duplicated/suppressed_total` |
 
 ## Tests
 
@@ -249,5 +251,5 @@ HTTP demos: `src/test/curl/*.sh`.
 
 - Typed appointment events other than `AppointmentChangedEvent` persist but do not run the full notify pipeline.
 - Replay over 50 events returns 500 instead of a structured 4xx.
-- No notification metrics or tracing yet (`IllegalArgumentException` is mapped to 400).
+- No distributed tracing yet (`IllegalArgumentException` is mapped to 400).
 - Production auth (JWT/mTLS), secrets, and EKS probes are design topics, not fully implemented here.

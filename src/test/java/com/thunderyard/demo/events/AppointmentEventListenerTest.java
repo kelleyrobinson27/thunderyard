@@ -1,6 +1,7 @@
 package com.thunderyard.demo.events;
 
 import com.thunderyard.demo.notifications.Notification;
+import com.thunderyard.demo.notifications.NotificationMetrics;
 import com.thunderyard.demo.notifications.NotificationRepository;
 import com.thunderyard.demo.events.persistence.EventStore;
 import org.junit.jupiter.api.Test;
@@ -27,10 +28,11 @@ class AppointmentEventListenerTest {
     private final NotificationRepository repo = mock(NotificationRepository.class);
     private final EasClient easClient = mock(EasClient.class);
     private final SmsQueueProducer smsProducer = mock(SmsQueueProducer.class);
-    private final EventStore eventStore = mock(EventStore.class);   // <-- NEW
+    private final EventStore eventStore = mock(EventStore.class);
+    private final NotificationMetrics metrics = mock(NotificationMetrics.class);
 
     private final AppointmentEventListener listener =
-            new AppointmentEventListener(repo, easClient, smsProducer, eventStore);  // <-- UPDATED
+            new AppointmentEventListener(repo, easClient, smsProducer, eventStore, metrics);
 
     /**
      * Helper method to build a valid AppointmentChangedEvent
