@@ -49,9 +49,9 @@ flowchart TB
 | HTTP | Spring MVC, Jakarta Validation |
 | Persistence | Spring Data JPA, PostgreSQL (`ddl-auto: update`) |
 | Messaging | Spring for Apache Kafka |
-| Downstream HTTP | WebClient + Resilience4j (retry, time limiter, circuit breaker) |
-| Security | Spring Security HTTP Basic |
-| Observability | Actuator, Micrometer Prometheus registry |
+| Downstream HTTP | WebClient + Resilience4j (EAS: retry, time limiter, circuit breaker; SMS mock: retry + circuit breaker) |
+| Security | Spring Security HTTP Basic + OAuth2 resource server (HS256 and RS256/JWKS) |
+| Observability | Actuator, Micrometer Prometheus, W3C `traceparent` in MDC (no Zipkin/OTel exporter) |
 | Build | Maven Wrapper (`mvnw` / `mvnw.cmd`) |
 
 ## Prerequisites
@@ -109,7 +109,7 @@ JDBC settings live in `src/main/resources/application.yml`. The active profile i
 Hibernate creates and updates tables. The important ones:
 
 - `events` — immutable ingest log used for replay
-- `notifications` — one row per `eventId` with status and failure reason
+- `notifications` — one row per `eventId` with status, failure reason, and `trace_id`
 
 ## Run
 
@@ -141,7 +141,7 @@ curl -u demo:demo ...
 | Persist | `EventStore` | JSON payload on `events` |
 | Dedupe | `NotificationRepository.findByEventId` | Duplicate `AppointmentChangedEvent` is dropped |
 | EAS | `EasClient` | GET `http://localhost:8081/appointments/{id}` |
-| Decide | `shouldNotify` | `CREATED` / `UPDATED` notify; `CANCELLED` suppressed |
+| Decide | `notifyIfEligible` | Created/updated/reminder/status/confirmation notify; cancel suppressed; EAS `canNotify` |
 | Queue SMS | `SmsQueueProducer` | Publishes `SmsJob` to `sms-jobs` (keyed by `appointmentId`; `traceparent` copied from MDC) |
 | Send | `SmsWorker` | Listens on `sms-jobs`; restores MDC from job; retries then DLQ |
 | DLQ | `DlqWorker` | Listens on `sms-jobs-dlq` (same MDC restore) |
@@ -259,16 +259,17 @@ Consumer group: `notification-service`. Multiple pods can share the group; idemp
 | Queue vs sync SMS | Listener queues work; `SmsWorker` sends asynchronously |
 | Stable IDs / idempotency | Unique `notifications.event_id` |
 | EAS timeouts / retries / CB | `@TimeLimiter`, `@Retry`, `@CircuitBreaker` on `EasClient`; 2s WebClient timeout; fallback `canNotify=false` |
-| Retryable vs permanent SMS | `RetryableSmsException` → Resilience4j retry/CB then Kafka requeue/DLQ; provider `false` → `FAILED` (no requeue) |
-| Dead letter / replay | `sms-jobs-dlq`; event store + `/events/replay/**` with a 50-event cap |
-| Multi-pod | Kafka consumer group + unique event IDs |
-| Delivery callbacks | `QUEUED → SENT → DELIVERED` (or `FAILED`) |
-| Opt-in | `AppointmentDetails.canNotify` from EAS; cancel events suppressed |
-| Minimal PHI | Mock phone/message; avoid logging full payloads in production |
-| Auth | HTTP Basic; `/sms/callback` also accepts HS256 (shared secret) or RS256 from `POST /oauth2/token`, verified against `GET /oauth2/jwks`. Production: Okta/JWKS, mTLS, workload identity |
+| SMS timeouts / retries / CB | `@Retry` + `@CircuitBreaker` on the mock; **no `@TimeLimiter`** (would match EAS on a real SMS WebClient) |
+| Retryable vs permanent SMS | `RetryableSmsException` → Resilience4j then Kafka requeue (max 3) / DLQ; provider `false` → `FAILED` (no requeue) |
+| Dead letter / replay | `sms-jobs-dlq` (`DlqWorker` holds/logs, does not auto-retry); event store + `/events/replay/**` with a 50-event cap (413) |
+| Multi-pod | Consumer group `notification-service` + unique event IDs (designed for EKS; this repo runs one local process) |
+| Delivery callbacks | `QUEUED → SENT → DELIVERED` (or `FAILED` / `RETRIED`) |
+| Opt-in | `AppointmentDetails.canNotify` from EAS (reserved opt-out UUID); cancel events suppressed |
+| Minimal PHI | Mock phone/message; worker logs use ids. **Ingest still logs the full event** (`AppointmentEventController`) — strip that in production |
+| Auth | HTTP Basic; `/sms/callback` accepts HS256 or RS256 (`POST /oauth2/token` + `GET /oauth2/jwks`). No TLS, no workload identity; secrets in local YAML |
 | Health | Actuator `health`, `liveness`, `readiness`; graceful Tomcat shutdown (20s) |
 | Metrics | `notifications_queued/sent/delivered/failed/retried/duplicated/suppressed_total` |
-| Tracing | `X-Correlation-Id` plus W3C `traceparent` on HTTP (`X-Trace-Id` / `traceresponse`); same `traceparent` on `SmsJob` and `notifications.trace_id` |
+| Tracing | `X-Correlation-Id` plus W3C `traceparent` on HTTP, `SmsJob`, and `notifications.trace_id`. **EAS WebClient does not forward `traceparent`.** No Zipkin/OTel exporter |
 
 ## Tests
 
@@ -288,5 +289,9 @@ HTTP demos: `src/test/curl/runAll*.sh`.
 
 ## Known gaps / next
 
-- No Zipkin/OTel exporter yet; HTTP and Kafka `SmsJob` carry W3C `traceparent` in MDC (`IllegalArgumentException` → 400, `ReplayTooLargeException` → 413).
-- Production auth would replace the in-process RSA key + `/oauth2/token` with Okta (or similar) JWKS, mTLS, or workload identity. HMAC remains for `runAll9Jwt`.
+These are production swaps, not missing demo slices:
+
+- No Zipkin/OTel exporter; ids live in MDC/headers/payload only. EAS outbound calls do not send `traceparent`.
+- Auth is demo HMAC + in-process RSA/JWKS. Production: Okta (or similar) JWKS, TLS, mTLS, workload identity. HMAC remains for `runAll9Jwt`.
+- SMS mock has no `@TimeLimiter`. Ingest logs the full event body (PHI). Not deployed to EKS.
+- `IllegalArgumentException` → 400; `ReplayTooLargeException` → 413.
