@@ -172,6 +172,7 @@ Ready-made scripts in `src/test/curl/`:
 - `runAll1Http.sh` — ingest, validation, list, replay (200, or 500 if more than 50 events); Kafka not required
 - `runAll2Kafka.sh` — SMS queue path (CREATED / duplicate / UPDATED / CANCELLED); needs Kafka
 - `runAll3Eas.sh` — EAS opt-in vs reserved opt-out `appointmentId`
+- `runAll4Sms.sh` — SMS success vs retryable timeout vs permanent failure (needs Kafka)
 
 ### Event log and replay
 
@@ -224,7 +225,7 @@ Consumer group: `notification-service`. Multiple pods can share the group; idemp
 | Queue vs sync SMS | Listener queues work; `SmsWorker` sends asynchronously |
 | Stable IDs / idempotency | Unique `notifications.event_id` |
 | EAS timeouts / retries / CB | `@TimeLimiter`, `@Retry`, `@CircuitBreaker` on `EasClient`; 2s WebClient timeout; fallback `canNotify=false` |
-| Retryable vs permanent SMS | Exception → retry/DLQ; provider `false` → `FAILED` |
+| Retryable vs permanent SMS | `RetryableSmsException` → Resilience4j retry/CB then Kafka requeue/DLQ; provider `false` → `FAILED` (no requeue) |
 | Dead letter / replay | `sms-jobs-dlq`; event store + `/events/replay/**` with a 50-event cap |
 | Multi-pod | Kafka consumer group + unique event IDs |
 | Delivery callbacks | `QUEUED → SENT → DELIVERED` (or `FAILED`) |

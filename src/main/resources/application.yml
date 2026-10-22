@@ -46,3 +46,29 @@ spring:
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.security.reactive.ReactiveSecurityAutoConfiguration
+
+resilience4j:
+  retry:
+    instances:
+      sms:
+        max-attempts: 3
+        wait-duration: 200ms
+        retry-exceptions:
+          - com.thunderyard.demo.sms.RetryableSmsException
+      eas:
+        max-attempts: 3
+        wait-duration: 200ms
+  circuitbreaker:
+    instances:
+      sms:
+        sliding-window-size: 6
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 5s
+      eas:
+        sliding-window-size: 6
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 5s
+  timelimiter:
+    instances:
+      eas:
+        timeout-duration: 2s
