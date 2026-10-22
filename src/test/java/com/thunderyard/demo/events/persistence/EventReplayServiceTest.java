@@ -40,8 +40,9 @@ class EventReplayServiceTest {
         when(repo.findByType("AppointmentChangedEvent")).thenReturn(tooMany);
 
         assertThatThrownBy(() -> service.replayByType("AppointmentChangedEvent"))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Replay too large");
+                .isInstanceOf(ReplayTooLargeException.class)
+                .hasMessageContaining("limited to 50")
+                .hasMessageContaining("got 51");
     }
 
     @Test

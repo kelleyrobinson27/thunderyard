@@ -2,7 +2,7 @@
 #
 # What it hits:
 #   Every event POST, validation 4xx, invalid path, list (all / type / date / count),
-#   replay-by-type, unknown type, replay-all (200, or 500 if count > 50).
+#   replay-by-type, unknown type, replay-all (200, or 413 if count > 50).
 #
 # Kafka is not required. Appointment-changed uses CANCELLED so SMS is not queued.
 # CREATED/UPDATED + SMS are covered by runAll2Kafka.sh / runAll4Sms.sh.
@@ -64,7 +64,7 @@ expected_replay_status() {
   local count
   count=$(printf '%s' "$1" | tr -d '\r[:space:]')
   if [ -n "$count" ] && [ "$count" -gt 50 ] 2>/dev/null; then
-    printf '500'
+    printf '413'
   else
     printf '200'
   fi
@@ -79,8 +79,8 @@ run_replay() {
   echo "=== $name ($count stored, expect HTTP $expected) ==="
   local code
   code=$(curl -s --max-time 20 -o /dev/null -w "%{http_code}" "$@" || true)
-  if [ "$expected" = "500" ] && [ "$(printf '%s' "$code" | tr -d '\r')" = "500" ]; then
-    echo "[PASS] $name - HTTP 500 (replay safety cap, $count events)"
+  if [ "$expected" = "413" ] && [ "$(printf '%s' "$code" | tr -d '\r')" = "413" ]; then
+    echo "[PASS] $name - HTTP 413 (replay safety cap, $count events)"
     PASS=$((PASS + 1))
     echo
   else

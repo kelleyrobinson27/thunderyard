@@ -50,8 +50,8 @@ public class EventReplayService {
 
     private int replay(List<EventEntity> events) {
 
-        if (events.size() > 50) {
-            throw new IllegalStateException("Replay too large — aborting.");
+        if (events.size() > ReplayTooLargeException.MAX_EVENTS) {
+            throw new ReplayTooLargeException(events.size());
         }
 
         int count = 0;
