@@ -12,6 +12,7 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
+import java.util.UUID;
 
 @Component
 public class AppointmentEventListener {
@@ -40,7 +41,9 @@ public class AppointmentEventListener {
     public void handleEvent(AppointmentChangedEvent event) {
         boolean owned = CorrelationIds.openIfAbsent(CorrelationIds.fromEventId(event.eventId()));
         try {
-            handleChanged(event);
+            eventStore.persist(event);
+            boolean typeAllowsNotify = event.eventType() != AppointmentChangedEvent.EventType.CANCELLED;
+            notifyIfEligible(event.eventId(), event.appointmentId(), event.patientId(), typeAllowsNotify);
         } finally {
             if (owned) {
                 CorrelationIds.close();
@@ -48,79 +51,62 @@ public class AppointmentEventListener {
         }
     }
 
-    private void handleChanged(AppointmentChangedEvent event) {
+    public void handleEvent(AppointmentReminderEvent event) {
         eventStore.persist(event);
+        notifyIfEligible(event.eventId(), event.appointmentId(), event.patientId(), true);
+    }
 
-        // 1. Idempotency check
-        Optional<Notification> existing = notificationRepository.findByEventId(event.eventId());
+    public void handleEvent(AppointmentCreatedEvent event) {
+        eventStore.persist(event);
+        notifyIfEligible(event.eventId(), event.appointmentId(), event.patientId(), true);
+    }
+
+    public void handleEvent(AppointmentCancelledEvent event) {
+        eventStore.persist(event);
+        notifyIfEligible(event.eventId(), event.appointmentId(), event.patientId(), false);
+    }
+
+    public void handleEvent(AppointmentStatusChangedEvent event) {
+        eventStore.persist(event);
+        notifyIfEligible(event.eventId(), event.appointmentId(), event.patientId(), true);
+    }
+
+    public void handleEvent(AppointmentConfirmationEvent event) {
+        eventStore.persist(event);
+        notifyIfEligible(event.eventId(), event.appointmentId(), event.patientId(), true);
+    }
+
+    private void notifyIfEligible(UUID eventId, UUID appointmentId, UUID patientId, boolean typeAllowsNotify) {
+        Optional<Notification> existing = notificationRepository.findByEventId(eventId);
         if (existing.isPresent()) {
             metrics.duplicated();
             return;
         }
 
-        // 2. Fetch appointment details from EAS (WebClient returns CompletableFuture)
-        AppointmentDetails appointment = easClient
-                .getAppointment(event.appointmentId())
-                .join(); // <-- FIX: wait for async result
+        AppointmentDetails appointment = easClient.getAppointment(appointmentId).join();
 
-        // 3. Decide whether notification is needed
-        if (!shouldNotify(event, appointment)) {
+        if (!typeAllowsNotify || !appointment.canNotify()) {
+            if (!appointment.canNotify()) {
+                log.info("Suppressing eventId={} — EAS canNotify=false", eventId);
+            }
             Notification suppressed = new Notification();
-            suppressed.setEventId(event.eventId());
-            suppressed.setAppointmentId(event.appointmentId());
-            suppressed.setPatientId(event.patientId());
+            suppressed.setEventId(eventId);
+            suppressed.setAppointmentId(appointmentId);
+            suppressed.setPatientId(patientId);
             suppressed.setStatus(Notification.Status.SUPPRESSED);
             notificationRepository.save(suppressed);
             metrics.suppressed();
             return;
         }
 
-        // 4. Create notification record
         Notification notification = new Notification();
-        notification.setEventId(event.eventId());
-        notification.setAppointmentId(event.appointmentId());
-        notification.setPatientId(event.patientId());
+        notification.setEventId(eventId);
+        notification.setAppointmentId(appointmentId);
+        notification.setPatientId(patientId);
         notification.setStatus(Notification.Status.QUEUED);
         notification = notificationRepository.save(notification);
 
         smsQueueProducer.publishSmsJob(notification);
         metrics.queued();
-    }
-
-    private boolean shouldNotify(AppointmentChangedEvent event, AppointmentDetails appointment) {
-        if (!appointment.canNotify()) {
-            log.info("Suppressing eventId={} — EAS canNotify=false", event.eventId());
-            return false;
-        }
-        return switch (event.eventType()) {
-            case CREATED, UPDATED -> true;
-            case CANCELLED -> false;
-        };
-    }
-
-    public void handleEvent(AppointmentReminderEvent event) {
-        eventStore.persist(event);   // <-- NEW
-        log.warn(">>> Listener processing AppointmentReminderEvent: {}", event);
-        // TODO: implement reminder-specific logic
-    }
-
-    public void handleEvent(AppointmentCreatedEvent event) {
-        eventStore.persist(event);   // <-- NEW
-        log.warn(">>> Listener processing AppointmentCreatedEvent: {}", event);
-    }
-
-    public void handleEvent(AppointmentCancelledEvent event) {
-        eventStore.persist(event);   // <-- NEW
-        log.warn(">>> Listener processing AppointmentCancelledEvent: {}", event);
-    }
-
-    public void handleEvent(AppointmentStatusChangedEvent event) {
-        eventStore.persist(event);   // <-- NEW
-        log.warn(">>> Listener processing AppointmentStatusChangedEvent: {}", event);
-    }
-
-    public void handleEvent(AppointmentConfirmationEvent event) {
-        eventStore.persist(event);   // <-- NEW
-        log.warn(">>> Listener processing AppointmentConfirmationEvent: {}", event);
     }
 }

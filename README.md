@@ -176,6 +176,7 @@ Curl suites in `src/test/curl/` (these are the only HTTP scripts):
 - `runAll5Metrics.sh` — `/actuator/health`, `/actuator/metrics`, Prometheus notification counters
 - `runAll6Tracing.sh` — `X-Correlation-Id` echo + persist (`GET /events?correlationId=`)
 - `runAll7Probes.sh` — `/actuator/health`, `/liveness`, `/readiness` (readiness wants Postgres + Kafka)
+- `runAll8Typed.sh` — reminder / created / status / confirmation queue SMS; typed cancel suppressed (needs Kafka)
 - `runAllEvents.sh` / `runAllAppointmentEvents.sh` — wrappers that run `runAll1Http.sh`
 
 ### Event log and replay
@@ -258,6 +259,5 @@ HTTP demos: `src/test/curl/runAll*.sh`.
 
 ## Known gaps / next
 
-- Typed appointment events other than `AppointmentChangedEvent` persist but do not run the full notify pipeline.
 - No Zipkin/OTel exporter yet; correlation is MDC + header + stored `correlationId` (`IllegalArgumentException` → 400, `ReplayTooLargeException` → 413).
 - Production auth (JWT/mTLS), secrets, and workload identity are design topics, not fully implemented here.

@@ -213,15 +213,14 @@ class AppointmentEventListenerTest {
     }
 
     @Test
-    void persistsTypedEventsWithoutQueuingSms() {
+    void typedEventsThatAllowNotifyQueueSms() {
+        stubEligible();
+
         AppointmentReminderEvent reminder = new AppointmentReminderEvent(
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 AppointmentReminderEvent.ReminderType.UPCOMING, Instant.now(), "test");
         AppointmentCreatedEvent created = new AppointmentCreatedEvent(
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), Instant.now(), "test");
-        AppointmentCancelledEvent cancelled = new AppointmentCancelledEvent(
-                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-                AppointmentCancelledEvent.CancelReason.SYSTEM, Instant.now(), "test");
         AppointmentStatusChangedEvent status = new AppointmentStatusChangedEvent(
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 AppointmentStatusChangedEvent.Status.SCHEDULED,
@@ -232,15 +231,46 @@ class AppointmentEventListenerTest {
 
         listener.handleEvent(reminder);
         listener.handleEvent(created);
-        listener.handleEvent(cancelled);
         listener.handleEvent(status);
         listener.handleEvent(confirmation);
 
         verify(eventStore).persist(reminder);
         verify(eventStore).persist(created);
-        verify(eventStore).persist(cancelled);
         verify(eventStore).persist(status);
         verify(eventStore).persist(confirmation);
+        verify(smsProducer, times(4)).publishSmsJob(any(Notification.class));
+        verify(metrics, times(4)).queued();
+    }
+
+    @Test
+    void typedCancelledEventIsSuppressedEvenWhenEasAllowsNotify() {
+        UUID appointmentId = UUID.randomUUID();
+        AppointmentCancelledEvent cancelled = new AppointmentCancelledEvent(
+                UUID.randomUUID(), appointmentId, UUID.randomUUID(),
+                AppointmentCancelledEvent.CancelReason.SYSTEM, Instant.now(), "test");
+        when(repo.findByEventId(cancelled.eventId())).thenReturn(Optional.empty());
+        when(easClient.getAppointment(appointmentId)).thenReturn(
+                CompletableFuture.completedFuture(
+                        new AppointmentDetails(appointmentId, "Dr. Smith", "2026-10-20", true)
+                )
+        );
+
+        listener.handleEvent(cancelled);
+
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(repo).save(captor.capture());
+        assert captor.getValue().getStatus() == Notification.Status.SUPPRESSED;
         verify(smsProducer, never()).publishSmsJob(any());
+        verify(metrics).suppressed();
+    }
+
+    private void stubEligible() {
+        when(repo.findByEventId(any())).thenReturn(Optional.empty());
+        when(easClient.getAppointment(any())).thenAnswer(inv ->
+                CompletableFuture.completedFuture(
+                        new AppointmentDetails(inv.getArgument(0), "Dr. Smith", "2026-10-20", true)
+                )
+        );
+        when(repo.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 }
