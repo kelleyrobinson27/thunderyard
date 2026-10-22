@@ -1,8 +1,10 @@
 package com.thunderyard.demo.sms;
 
+import com.thunderyard.demo.config.KafkaTopics;
 import com.thunderyard.demo.notifications.Notification;
 import com.thunderyard.demo.notifications.NotificationRepository;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
@@ -11,6 +13,8 @@ import java.util.Optional;
 
 @Component
 public class SmsWorker {
+
+    private static final Logger log = LoggerFactory.getLogger(SmsWorker.class);
 
     private final SmsProviderClient smsProviderClient;
     private final NotificationRepository notificationRepository;
@@ -24,15 +28,14 @@ public class SmsWorker {
         this.kafkaTemplate = kafkaTemplate;
     }
 
-    @KafkaListener(topics = "sms-jobs", groupId = "notification-service")
+    @KafkaListener(topics = KafkaTopics.SMS_JOBS, groupId = "notification-service")
     public void handleSmsJob(SmsJob job) {
 
-        // 1. Fetch notification record
         Optional<Notification> notificationOpt =
                 notificationRepository.findById(job.getNotificationId());
 
         if (notificationOpt.isEmpty()) {
-            System.out.println("Notification not found for job: " + job);
+            log.warn("Notification not found for job correlationId={}", job.getCorrelationId());
             return;
         }
 
@@ -56,22 +59,20 @@ public class SmsWorker {
         } catch (Exception ex) {
 
             // 4. Retryable failure (network, timeout, transient)
-            System.out.println("Retryable SMS failure: " + ex.getMessage());
+            log.warn("Retryable SMS failure correlationId={}: {}", job.getCorrelationId(), ex.getMessage());
 
             int retryCount = job.getRetryCount() + 1;
 
             if (retryCount <= 3) {
-                // 5. Requeue with incremented retry count
                 SmsJob retryJob = job.withRetryCount(retryCount);
-                kafkaTemplate.send("sms-jobs", retryJob);
+                kafkaTemplate.send(KafkaTopics.SMS_JOBS, job.getCorrelationId(), retryJob);
                 notification.setStatus(Notification.Status.RETRIED);
                 notificationRepository.save(notification);
                 return;
             }
 
-            // 6. Retries exhausted → DLQ
-            System.out.println("Sending job to DLQ: " + job);
-            kafkaTemplate.send("sms-jobs-dlq", job);
+            log.warn("Sending job to DLQ correlationId={}", job.getCorrelationId());
+            kafkaTemplate.send(KafkaTopics.SMS_JOBS_DLQ, job.getCorrelationId(), job);
 
             notification.setStatus(Notification.Status.FAILED);
             notification.setFailureReason("Retries exhausted");

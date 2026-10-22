@@ -125,6 +125,7 @@ class AppointmentEventListenerTest {
                         new AppointmentDetails(appointmentId, "Dr. Smith", "2026-10-20", true)
                 )
         );
+        when(repo.save(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         listener.handleEvent(evt);
 

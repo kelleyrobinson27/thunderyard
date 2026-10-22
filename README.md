@@ -48,8 +48,39 @@ flowchart LR
 
 - JDK 21
 - PostgreSQL on `localhost:5432`
-- Optional: Kafka on the default bootstrap (`localhost:9092`) if you exercise listeners and SMS retries
+- Docker Desktop (or another Compose runtime) for local Kafka
 - Optional: a mock EAS on `http://localhost:8081` (the client falls back if it is down)
+
+## Docker: local Kafka
+
+SMS is **not** sent on the HTTP request thread. After a `CREATED`/`UPDATED` appointment-change, the listener saves a `QUEUED` notification and publishes an `SmsJob` to Kafka topic `sms-jobs`. `SmsWorker` consumes that topic, talks to the mocked SMS provider, and updates status (`SENT`, retry, or DLQ).
+
+Without a broker on `localhost:9092` that path fails: the producer waits for topic metadata (`Topic sms-jobs not present in metadata`) and the request returns **500**. Duplicate `eventId`s can still return **200** because the notification row was saved *before* the Kafka send.
+
+Docker Compose is the supported way to run Kafka for this demo. You do not need a full Kafka install. `docker-compose.yml` starts a single KRaft broker (Apache Kafka 3.9) advertised at `localhost:9092`, then `kafka-init` creates:
+
+| Topic | Why |
+|-------|-----|
+| `sms-jobs` | Queue boundary for send + retries |
+| `sms-jobs-dlq` | Jobs that exhausted retries |
+| `appointment-events` | Optional event-bus ingest (HTTP is the usual demo path) |
+
+```bash
+# from the project root
+docker compose up -d
+docker compose ps
+# Cygwin / Git Bash: confirm the host port
+netstat -an | grep 9092
+```
+
+Wait until Kafka is healthy and `kafka-init` has listed the three topics. **Then** start (or restart) the Spring Boot app so consumers connect to a live broker. If you start the app first, Spring may not see the topics until you restart it.
+
+```bash
+docker compose down      # stop
+docker compose down -v   # stop and drop Kafka volumes
+```
+
+Postgres is not in Compose; it still runs on the host as below.
 
 ## Database
 
@@ -71,6 +102,8 @@ Hibernate creates and updates tables. The important ones:
 - `notifications` — one row per `eventId` with status and failure reason
 
 ## Run
+
+Start Kafka first (`docker compose up -d`), then:
 
 ```bash
 ./mvnw test
@@ -99,7 +132,7 @@ curl -u demo:demo ...
 | Dedupe | `NotificationRepository.findByEventId` | Duplicate `AppointmentChangedEvent` is dropped |
 | EAS | `EasClient` | GET `http://localhost:8081/appointments/{id}` |
 | Decide | `shouldNotify` | `CREATED` / `UPDATED` notify; `CANCELLED` suppressed |
-| Queue SMS | `SmsQueueProducer` | Builds `SmsJob` (currently logs; Kafka publish is next) |
+| Queue SMS | `SmsQueueProducer` | Publishes `SmsJob` to `sms-jobs` (keyed by `appointmentId`) |
 | Send | `SmsWorker` | Listens on `sms-jobs`; retries then DLQ |
 | DLQ | `DlqWorker` | Listens on `sms-jobs-dlq` |
 | Callback | `DeliveryCallbackController` | `POST /sms/callback` |
@@ -134,13 +167,17 @@ curl -u demo:demo -X POST http://localhost:8080/events/appointment-changed \
   }'
 ```
 
-Ready-made scripts: `src/test/curl/` (`sendAppointmentChangedEvent.sh`, `runAllEvents.sh`, and related cases).
+Ready-made scripts in `src/test/curl/`:
+
+- `runAll.sh` — ingest, validation, list, replay (200, or 500 if more than 50 events)
+- `runAll2.sh` — SMS queue path (CREATED / duplicate / UPDATED / CANCELLED); needs Kafka
 
 ### Event log and replay
 
 | Method | Path | Notes |
 |--------|------|--------|
 | GET | `/events` | All stored events |
+| GET | `/events/count` | Row count (`?type=` optional) |
 | GET | `/events?type=AppointmentChangedEvent` | Filter by type |
 | GET | `/events?from=2026-10-21T00:00:00Z&to=2026-10-22T00:00:00Z` | Filter by `createdAt` |
 | POST | `/events/replay/all` | Re-dispatch every stored event |
@@ -208,8 +245,7 @@ HTTP demos: `src/test/curl/*.sh`.
 
 ## Known gaps / next
 
-- `SmsQueueProducer` still logs the job instead of publishing to `sms-jobs`.
 - Typed appointment events other than `AppointmentChangedEvent` persist but do not run the full notify pipeline.
 - Replay over 50 events returns 500 instead of a structured 4xx.
-- No global exception handler, tracing, or notification metrics yet.
+- No notification metrics or tracing yet (`IllegalArgumentException` is mapped to 400).
 - Production auth (JWT/mTLS), secrets, and EKS probes are design topics, not fully implemented here.

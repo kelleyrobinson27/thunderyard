@@ -1,19 +1,19 @@
 package com.thunderyard.demo.sms;
 
+import com.thunderyard.demo.config.KafkaTopics;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 @Component
 public class DlqWorker {
 
-    @KafkaListener(topics = "sms-jobs-dlq", groupId = "notification-service")
-    public void handleDlq(SmsJob job) {
-        System.out.println("DLQ received job: " + job);
+    private static final Logger log = LoggerFactory.getLogger(DlqWorker.class);
 
-        // In a real system:
-        // - You might alert DevOps
-        // - Store in S3
-        // - Trigger manual replay
-        // - Or send to a human review queue
+    @KafkaListener(topics = KafkaTopics.SMS_JOBS_DLQ, groupId = "notification-service")
+    public void handleDlq(SmsJob job) {
+        log.warn("DLQ received job correlationId={} notificationId={}",
+                job.getCorrelationId(), job.getNotificationId());
     }
 }

@@ -1,5 +1,6 @@
 package com.thunderyard.demo.events;
 
+import com.thunderyard.demo.config.KafkaTopics;
 import com.thunderyard.demo.notifications.Notification;
 import com.thunderyard.demo.notifications.NotificationRepository;
 import com.thunderyard.demo.events.persistence.EventStore;
@@ -30,7 +31,7 @@ public class AppointmentEventListener {
         this.eventStore = eventStore;      // <-- NEW
     }
 
-    @KafkaListener(topics = "appointment-events", groupId = "notification-service")
+    @KafkaListener(topics = KafkaTopics.APPOINTMENT_EVENTS, groupId = "notification-service")
     public void handleEvent(AppointmentChangedEvent event) {
 
         // 0. Persist event
@@ -64,9 +65,8 @@ public class AppointmentEventListener {
         notification.setAppointmentId(event.appointmentId());
         notification.setPatientId(event.patientId());
         notification.setStatus(Notification.Status.QUEUED);
-        notificationRepository.save(notification);
+        notification = notificationRepository.save(notification);
 
-        // 5. Publish SMS job
         smsQueueProducer.publishSmsJob(notification);
     }
 

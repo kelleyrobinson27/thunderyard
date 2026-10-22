@@ -55,7 +55,7 @@ class SmsWorkerTest {
 
         worker.handleSmsJob(job);
 
-        verify(kafka).send(eq("sms-jobs"), any(SmsJob.class));
+        verify(kafka).send(eq("sms-jobs"), any(), any(SmsJob.class));
         assert n.getStatus() == Notification.Status.RETRIED;
     }
 
@@ -75,7 +75,7 @@ class SmsWorkerTest {
 
         worker.handleSmsJob(job);
 
-        verify(kafka).send("sms-jobs-dlq", job);
+        verify(kafka).send(eq("sms-jobs-dlq"), any(), eq(job));
         assert n.getStatus() == Notification.Status.FAILED;
     }
 }
