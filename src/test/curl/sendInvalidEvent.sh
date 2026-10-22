@@ -2,8 +2,10 @@
 
 echo "=== Sending invalid JSON to test error handling ==="
 
-curl -X POST http://localhost:8080/events/changed \
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+  -X POST http://localhost:8080/events/changed \
   -H "Content-Type: application/json" \
-  -d "{ invalid json }"
-echo
+  -d "{ invalid json }")
+
+echo "HTTP Status: $STATUS"
 

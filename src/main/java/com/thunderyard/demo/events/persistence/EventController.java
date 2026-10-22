@@ -37,4 +37,12 @@ public class EventController {
         // Default: return all events
         return repository.findAll();
     }
+
+    @GetMapping("/count")
+    public long getCount(@RequestParam(required = false) String type) {
+        if (type != null) {
+            return repository.countByType(type);
+        }
+        return repository.count();
+    }
 }

@@ -9,6 +9,8 @@ public interface EventRepository extends JpaRepository<EventEntity, UUID> {
 
     List<EventEntity> findByType(String type);
 
+    long countByType(String type);
+
     List<EventEntity> findByCorrelationId(String correlationId);
 
     List<EventEntity> findByCreatedAtBetween(Instant start, Instant end);
