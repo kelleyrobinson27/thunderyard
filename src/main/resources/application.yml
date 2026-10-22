@@ -1,0 +1,27 @@
+spring:
+  profiles:
+    active: local
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/thunderyard
+    username: thunderyard_user
+    password: thisIsOverWrittenByApplicationLocalYmlFile
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  jpa.show-sql: true
+
+  security:
+    user:
+      name: demo
+      password: demo
+
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.reactive.ReactiveSecurityAutoConfiguration
