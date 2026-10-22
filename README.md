@@ -177,6 +177,7 @@ Curl suites in `src/test/curl/` (these are the only HTTP scripts):
 - `runAll6Tracing.sh` — `X-Correlation-Id` echo + persist (`GET /events?correlationId=`)
 - `runAll7Probes.sh` — `/actuator/health`, `/liveness`, `/readiness` (readiness wants Postgres + Kafka)
 - `runAll8Typed.sh` — reminder / created / status / confirmation queue SMS; typed cancel suppressed (needs Kafka)
+- `runAll9Jwt.sh` — `/sms/callback` 401 / 404 / 200 DELIVERED with HS256 JWT (needs Kafka for the 200)
 - `runAllEvents.sh` / `runAllAppointmentEvents.sh` — wrappers that run `runAll1Http.sh`
 
 ### Event log and replay
@@ -197,6 +198,12 @@ Replay deserializes stored JSON and calls the listener again. It **aborts if the
 curl -u demo:demo http://localhost:8080/events
 curl -u demo:demo -X POST http://localhost:8080/events/replay/AppointmentChangedEvent
 curl -u demo:demo -X POST http://localhost:8080/events/replay/all
+```
+
+### Notification lookup
+
+```bash
+curl -u demo:demo "http://localhost:8080/notifications?eventId=<eventId>"
 ```
 
 ### SMS delivery callback
@@ -237,7 +244,7 @@ Consumer group: `notification-service`. Multiple pods can share the group; idemp
 | Delivery callbacks | `QUEUED → SENT → DELIVERED` (or `FAILED`) |
 | Opt-in | `AppointmentDetails.canNotify` from EAS; cancel events suppressed |
 | Minimal PHI | Mock phone/message; avoid logging full payloads in production |
-| Auth | HTTP Basic for the demo; production would use TLS, JWT, workload identity |
+| Auth | HTTP Basic for the demo; SMS callback also accepts HS256 JWT (`thunderyard.jwt.secret`). Production: TLS, JWKS, workload identity |
 | Health | Actuator `health`, `liveness`, `readiness`; graceful Tomcat shutdown (20s) |
 | Metrics | `notifications_queued/sent/delivered/failed/retried/duplicated/suppressed_total` |
 | Tracing | `X-Correlation-Id` (or generated UUID) in MDC, event row, SMS job, and logs |
@@ -252,12 +259,13 @@ Unit and slice tests live under `src/test/java`:
 - `EasClientTest`, `GlobalExceptionHandlerTest`
 - `SmsQueueProducerTest`, `SmsWorkerTest`, `DlqWorkerTest`, `SmsProviderClientTest`
 - `DeliveryCallbackControllerTest`
-- `NotificationMetricsTest`
+- `NotificationMetricsTest`, `NotificationControllerTest`
 - `CorrelationIdsTest`, `CorrelationFilterTest`
+- `JwtConfigTest`
 
 HTTP demos: `src/test/curl/runAll*.sh`.
 
 ## Known gaps / next
 
 - No Zipkin/OTel exporter yet; correlation is MDC + header + stored `correlationId` (`IllegalArgumentException` → 400, `ReplayTooLargeException` → 413).
-- Production auth (JWT/mTLS), secrets, and workload identity are design topics, not fully implemented here.
+- Production auth is still a demo HMAC JWT (no JWKS, mTLS, or workload identity).

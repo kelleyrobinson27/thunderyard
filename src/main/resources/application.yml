@@ -103,3 +103,8 @@ resilience4j:
     instances:
       eas:
         timeout-duration: 2s
+
+# Local demo HMAC secret (32+ chars). Production would use JWKS / workload identity.
+thunderyard:
+  jwt:
+    secret: thunderyard-demo-hmac-secret-key-32

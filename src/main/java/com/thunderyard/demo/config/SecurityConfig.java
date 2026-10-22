@@ -6,6 +6,9 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
@@ -30,11 +33,23 @@ public class SecurityConfig {
                         // Allow all appointment event POST endpoints
                         .requestMatchers(HttpMethod.POST, "/events/appointment-**").permitAll()
 
-                        // Everything else requires authentication
+                        // Everything else requires authentication (Basic or JWT)
                         .anyRequest().authenticated()
                 )
-                .httpBasic(Customizer.withDefaults());
+                .httpBasic(Customizer.withDefaults())
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
 
         return http.build();
+    }
+
+    // oauth2 resource-server disables the default demo/demo user; keep Basic working.
+    @Bean
+    public UserDetailsService users() {
+        return new InMemoryUserDetailsManager(
+                User.withUsername("demo")
+                        .password("{noop}demo")
+                        .roles("USER")
+                        .build()
+        );
     }
 }
