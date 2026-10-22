@@ -1,6 +1,6 @@
 logging:
   pattern:
-    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %5p ${PID:- } --- [%t] [%X{correlationId:-}] %-40.40logger{39} : %msg%n"
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %5p ${PID:- } --- [%t] [%X{correlationId:-}] [%X{traceId:-}] %-40.40logger{39} : %msg%n"
 
 server:
   shutdown: graceful

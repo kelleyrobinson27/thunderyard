@@ -22,8 +22,12 @@ public class CorrelationFilter extends OncePerRequestFilter {
         String incoming = request.getHeader(CorrelationIds.HEADER);
         String id = (incoming != null && !incoming.isBlank()) ? incoming.trim() : CorrelationIds.newId();
         CorrelationIds.open(id);
+        TraceContext.Parsed trace = TraceContext.parseOrCreate(request.getHeader(TraceContext.TRACEPARENT));
+        TraceContext.open(trace);
         try {
             response.setHeader(CorrelationIds.HEADER, id);
+            response.setHeader(TraceContext.X_TRACE_ID, trace.traceId());
+            response.setHeader(TraceContext.TRACERESPONSE, trace.asTraceparent());
             filterChain.doFilter(request, response);
             String current = CorrelationIds.current();
             if (current != null && !current.isBlank()) {
@@ -31,6 +35,7 @@ public class CorrelationFilter extends OncePerRequestFilter {
             }
         } finally {
             CorrelationIds.close();
+            TraceContext.close();
         }
     }
 }

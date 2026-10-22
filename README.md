@@ -178,6 +178,7 @@ Curl suites in `src/test/curl/` (these are the only HTTP scripts):
 - `runAll7Probes.sh` — `/actuator/health`, `/liveness`, `/readiness` (readiness wants Postgres + Kafka)
 - `runAll8Typed.sh` — reminder / created / status / confirmation queue SMS; typed cancel suppressed (needs Kafka)
 - `runAll9Jwt.sh` — `/sms/callback` 401 / 404 / 200 DELIVERED with HS256 JWT (needs Kafka for the 200)
+- `runAll10Trace.sh` — W3C `traceparent` echoed as `traceresponse` / `X-Trace-Id`
 - `runAllEvents.sh` / `runAllAppointmentEvents.sh` — wrappers that run `runAll1Http.sh`
 
 ### Event log and replay
@@ -247,7 +248,7 @@ Consumer group: `notification-service`. Multiple pods can share the group; idemp
 | Auth | HTTP Basic for the demo; SMS callback also accepts HS256 JWT (`thunderyard.jwt.secret`). Production: TLS, JWKS, workload identity |
 | Health | Actuator `health`, `liveness`, `readiness`; graceful Tomcat shutdown (20s) |
 | Metrics | `notifications_queued/sent/delivered/failed/retried/duplicated/suppressed_total` |
-| Tracing | `X-Correlation-Id` (or generated UUID) in MDC, event row, SMS job, and logs |
+| Tracing | `X-Correlation-Id` plus W3C `traceparent` (`X-Trace-Id` / `traceresponse` in MDC and logs) |
 
 ## Tests
 
@@ -260,12 +261,12 @@ Unit and slice tests live under `src/test/java`:
 - `SmsQueueProducerTest`, `SmsWorkerTest`, `DlqWorkerTest`, `SmsProviderClientTest`
 - `DeliveryCallbackControllerTest`
 - `NotificationMetricsTest`, `NotificationControllerTest`
-- `CorrelationIdsTest`, `CorrelationFilterTest`
+- `CorrelationIdsTest`, `CorrelationFilterTest`, `TraceContextTest`
 - `JwtConfigTest`
 
 HTTP demos: `src/test/curl/runAll*.sh`.
 
 ## Known gaps / next
 
-- No Zipkin/OTel exporter yet; correlation is MDC + header + stored `correlationId` (`IllegalArgumentException` → 400, `ReplayTooLargeException` → 413).
+- No Zipkin/OTel exporter yet; HTTP carries W3C `traceparent` in MDC (`IllegalArgumentException` → 400, `ReplayTooLargeException` → 413).
 - Production auth is still a demo HMAC JWT (no JWKS, mTLS, or workload identity).
