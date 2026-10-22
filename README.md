@@ -174,6 +174,7 @@ Ready-made scripts in `src/test/curl/`:
 - `runAll3Eas.sh` — EAS opt-in vs reserved opt-out `appointmentId`
 - `runAll4Sms.sh` — SMS success vs retryable timeout vs permanent failure (needs Kafka)
 - `runAll5Metrics.sh` — scrape `/actuator/prometheus` for notification counters
+- `runAll6Tracing.sh` — `X-Correlation-Id` echo + persist (`GET /events?correlationId=`)
 
 ### Event log and replay
 
@@ -183,6 +184,7 @@ Ready-made scripts in `src/test/curl/`:
 | GET | `/events/count` | Row count (`?type=` optional) |
 | GET | `/events?type=AppointmentChangedEvent` | Filter by type |
 | GET | `/events?from=2026-10-21T00:00:00Z&to=2026-10-22T00:00:00Z` | Filter by `createdAt` |
+| GET | `/events?correlationId=corr-...` | Filter by correlation id |
 | POST | `/events/replay/all` | Re-dispatch every stored event |
 | POST | `/events/replay/{type}` | Re-dispatch one type, e.g. `AppointmentChangedEvent` |
 
@@ -235,6 +237,7 @@ Consumer group: `notification-service`. Multiple pods can share the group; idemp
 | Auth | HTTP Basic for the demo; production would use TLS, JWT, workload identity |
 | Health | Actuator `health`, `metrics`, `prometheus` at `/actuator/**` |
 | Metrics | `notifications_queued/sent/delivered/failed/retried/duplicated/suppressed_total` |
+| Tracing | `X-Correlation-Id` (or generated UUID) in MDC, event row, SMS job, and logs |
 
 ## Tests
 
@@ -243,7 +246,8 @@ Unit and slice tests live under `src/test/java`:
 - `AppointmentEventListenerTest`
 - `EventStoreTest`, `EventControllerTest`, `EventPersistenceIntegrationTest`
 - `EasClientTest`
-- `SmsWorkerTest`, `DeliveryCallbackControllerTest`
+- `SmsWorkerTest`, `DlqWorkerTest`, `DeliveryCallbackControllerTest`
+- `CorrelationIdsTest`, `CorrelationFilterTest`
 
 HTTP demos: `src/test/curl/*.sh`.
 
@@ -251,5 +255,5 @@ HTTP demos: `src/test/curl/*.sh`.
 
 - Typed appointment events other than `AppointmentChangedEvent` persist but do not run the full notify pipeline.
 - Replay over 50 events returns 500 instead of a structured 4xx.
-- No distributed tracing yet (`IllegalArgumentException` is mapped to 400).
+- No Zipkin/OTel exporter yet; correlation is MDC + header + stored `correlationId` (`IllegalArgumentException` is mapped to 400).
 - Production auth (JWT/mTLS), secrets, and EKS probes are design topics, not fully implemented here.

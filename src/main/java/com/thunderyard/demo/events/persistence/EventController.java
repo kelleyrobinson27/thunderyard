@@ -19,8 +19,12 @@ public class EventController {
     public List<EventEntity> getEvents(
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String from,
-            @RequestParam(required = false) String to
+            @RequestParam(required = false) String to,
+            @RequestParam(required = false) String correlationId
     ) {
+        if (correlationId != null) {
+            return repository.findByCorrelationId(correlationId);
+        }
 
         // Filter by type only
         if (type != null && from == null && to == null) {

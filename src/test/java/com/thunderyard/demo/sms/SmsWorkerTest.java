@@ -1,8 +1,10 @@
 package com.thunderyard.demo.sms;
 
+import com.thunderyard.demo.config.CorrelationIds;
 import com.thunderyard.demo.notifications.Notification;
 import com.thunderyard.demo.notifications.NotificationMetrics;
 import com.thunderyard.demo.notifications.NotificationRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -20,6 +22,11 @@ class SmsWorkerTest {
     private final NotificationMetrics metrics = mock(NotificationMetrics.class);
 
     private final SmsWorker worker = new SmsWorker(provider, repo, kafka, metrics);
+
+    @AfterEach
+    void clearMdc() {
+        CorrelationIds.close();
+    }
 
     @Test
     void marksNotificationSentOnSuccess() {
@@ -79,5 +86,26 @@ class SmsWorkerTest {
 
         verify(kafka).send(eq("sms-jobs-dlq"), any(), eq(job));
         assert n.getStatus() == Notification.Status.FAILED;
+    }
+
+    @Test
+    void putsJobCorrelationIdInMdcWhileSending() {
+        UUID id = UUID.randomUUID();
+        Notification n = new Notification();
+        n.setNotificationId(id);
+        SmsJob job = SmsJob.builder()
+                .notificationId(id)
+                .correlationId("corr-sms")
+                .retryCount(0)
+                .build();
+        when(repo.findById(id)).thenReturn(Optional.of(n));
+        when(provider.sendSms(job)).thenAnswer(inv -> {
+            assert CorrelationIds.current().equals("corr-sms");
+            return true;
+        });
+
+        worker.handleSmsJob(job);
+
+        assert CorrelationIds.current() == null;
     }
 }

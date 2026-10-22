@@ -1,5 +1,6 @@
 package com.thunderyard.demo.sms;
 
+import com.thunderyard.demo.config.CorrelationIds;
 import com.thunderyard.demo.notifications.Notification;
 import com.thunderyard.demo.notifications.NotificationMetrics;
 import com.thunderyard.demo.notifications.NotificationRepository;
@@ -27,6 +28,7 @@ public class DeliveryCallbackController {
 
     @PostMapping("/callback")
     public ResponseEntity<Void> handleCallback(@RequestBody DeliveryStatusCallback callback) {
+        CorrelationIds.openIfAbsent(callback.getCorrelationId());
 
         log.info("Delivery callback received corr={} status={}",
                 callback.getCorrelationId(), callback.getStatus());

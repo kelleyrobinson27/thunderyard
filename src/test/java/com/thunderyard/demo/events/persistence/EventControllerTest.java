@@ -25,7 +25,7 @@ class EventControllerTest {
 
         when(repo.findAll()).thenReturn(List.of(e));
 
-        List<EventEntity> result = controller.getEvents(null, null, null);
+        List<EventEntity> result = controller.getEvents(null, null, null, null);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getType()).isEqualTo("TestEvent");
@@ -35,7 +35,7 @@ class EventControllerTest {
     void filtersByType() {
         when(repo.findByType("FooEvent")).thenReturn(List.of(new EventEntity()));
 
-        List<EventEntity> result = controller.getEvents("FooEvent", null, null);
+        List<EventEntity> result = controller.getEvents("FooEvent", null, null, null);
 
         assertThat(result).hasSize(1);
     }
@@ -48,8 +48,18 @@ class EventControllerTest {
         when(repo.findByCreatedAtBetween(start, end))
                 .thenReturn(List.of(new EventEntity()));
 
-        List<EventEntity> result = controller.getEvents(null, start.toString(), end.toString());
+        List<EventEntity> result = controller.getEvents(null, start.toString(), end.toString(), null);
 
         assertThat(result).hasSize(1);
+    }
+
+    @Test
+    void filtersByCorrelationId() {
+        when(repo.findByCorrelationId("corr-demo")).thenReturn(List.of(new EventEntity()));
+
+        List<EventEntity> result = controller.getEvents(null, null, null, "corr-demo");
+
+        assertThat(result).hasSize(1);
+        verify(repo).findByCorrelationId("corr-demo");
     }
 }

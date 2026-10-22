@@ -1,5 +1,6 @@
 package com.thunderyard.demo.events;
 
+import com.thunderyard.demo.config.CorrelationIds;
 import com.thunderyard.demo.config.KafkaTopics;
 import com.thunderyard.demo.notifications.Notification;
 import com.thunderyard.demo.sms.SmsJob;
@@ -27,7 +28,7 @@ public class SmsQueueProducer {
                 .patientId(notification.getPatientId())
                 .phoneNumber("555-123-4567")
                 .messageBody("Your appointment has been updated.")
-                .correlationId("corr-" + notification.getEventId())
+                .correlationId(CorrelationIds.currentOr(CorrelationIds.fromEventId(notification.getEventId())))
                 .retryCount(0)
                 .build();
 

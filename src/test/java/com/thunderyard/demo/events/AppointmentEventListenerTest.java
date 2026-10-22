@@ -1,9 +1,11 @@
 package com.thunderyard.demo.events;
 
+import com.thunderyard.demo.config.CorrelationIds;
 import com.thunderyard.demo.notifications.Notification;
 import com.thunderyard.demo.notifications.NotificationMetrics;
 import com.thunderyard.demo.notifications.NotificationRepository;
 import com.thunderyard.demo.events.persistence.EventStore;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -38,6 +40,11 @@ class AppointmentEventListenerTest {
      * Helper method to build a valid AppointmentChangedEvent
      * matching your actual record constructor.
      */
+    @AfterEach
+    void clearMdc() {
+        CorrelationIds.close();
+    }
+
     private AppointmentChangedEvent event(
             UUID eventId,
             UUID appointmentId,
@@ -162,5 +169,46 @@ class AppointmentEventListenerTest {
         verify(repo).save(captor.capture());
         assert captor.getValue().getStatus() == Notification.Status.SUPPRESSED;
         verify(smsProducer, never()).publishSmsJob(any());
+    }
+
+    @Test
+    void pinsCorrEventIdWhenMdcEmptyAndClearsAfter() {
+        UUID eventId = UUID.randomUUID();
+        AppointmentChangedEvent evt = event(
+                eventId,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                AppointmentChangedEvent.EventType.UPDATED
+        );
+        when(repo.findByEventId(eventId)).thenReturn(Optional.of(new Notification()));
+        doAnswer(inv -> {
+            assert CorrelationIds.current().equals(CorrelationIds.fromEventId(eventId));
+            return null;
+        }).when(eventStore).persist(evt);
+
+        listener.handleEvent(evt);
+
+        assert CorrelationIds.current() == null;
+    }
+
+    @Test
+    void keepsInboundCorrelationId() {
+        UUID eventId = UUID.randomUUID();
+        AppointmentChangedEvent evt = event(
+                eventId,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                AppointmentChangedEvent.EventType.UPDATED
+        );
+        when(repo.findByEventId(eventId)).thenReturn(Optional.of(new Notification()));
+        CorrelationIds.open("corr-inbound");
+        doAnswer(inv -> {
+            assert CorrelationIds.current().equals("corr-inbound");
+            return null;
+        }).when(eventStore).persist(evt);
+
+        listener.handleEvent(evt);
+
+        assert CorrelationIds.current().equals("corr-inbound");
     }
 }

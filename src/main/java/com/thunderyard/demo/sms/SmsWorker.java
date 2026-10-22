@@ -1,5 +1,6 @@
 package com.thunderyard.demo.sms;
 
+import com.thunderyard.demo.config.CorrelationIds;
 import com.thunderyard.demo.config.KafkaTopics;
 import com.thunderyard.demo.notifications.Notification;
 import com.thunderyard.demo.notifications.NotificationMetrics;
@@ -34,7 +35,10 @@ public class SmsWorker {
 
     @KafkaListener(topics = KafkaTopics.SMS_JOBS, groupId = "notification-service")
     public void handleSmsJob(SmsJob job) {
+        CorrelationIds.run(job.getCorrelationId(), () -> handleSmsJobWithMdc(job));
+    }
 
+    private void handleSmsJobWithMdc(SmsJob job) {
         Optional<Notification> notificationOpt =
                 notificationRepository.findById(job.getNotificationId());
 

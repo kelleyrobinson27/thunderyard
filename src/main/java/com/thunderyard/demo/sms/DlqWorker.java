@@ -1,5 +1,6 @@
 package com.thunderyard.demo.sms;
 
+import com.thunderyard.demo.config.CorrelationIds;
 import com.thunderyard.demo.config.KafkaTopics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,7 +14,8 @@ public class DlqWorker {
 
     @KafkaListener(topics = KafkaTopics.SMS_JOBS_DLQ, groupId = "notification-service")
     public void handleDlq(SmsJob job) {
-        log.warn("DLQ received job correlationId={} notificationId={}",
-                job.getCorrelationId(), job.getNotificationId());
+        CorrelationIds.run(job.getCorrelationId(), () ->
+                log.warn("DLQ received job correlationId={} notificationId={}",
+                        job.getCorrelationId(), job.getNotificationId()));
     }
 }

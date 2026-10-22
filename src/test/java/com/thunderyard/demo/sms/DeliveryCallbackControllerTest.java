@@ -1,8 +1,10 @@
 package com.thunderyard.demo.sms;
 
+import com.thunderyard.demo.config.CorrelationIds;
 import com.thunderyard.demo.notifications.Notification;
 import com.thunderyard.demo.notifications.NotificationMetrics;
 import com.thunderyard.demo.notifications.NotificationRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
@@ -16,6 +18,11 @@ class DeliveryCallbackControllerTest {
     private final NotificationMetrics metrics = mock(NotificationMetrics.class);
     private final DeliveryCallbackController controller =
             new DeliveryCallbackController(repo, metrics);
+
+    @AfterEach
+    void clearMdc() {
+        CorrelationIds.close();
+    }
 
     @Test
     void marksDelivered() {
@@ -52,5 +59,25 @@ class DeliveryCallbackControllerTest {
 
         assert n.getStatus() == Notification.Status.FAILED;
         assert n.getFailureReason().equals("404");
+    }
+
+    @Test
+    void opensMdcFromCallbackCorrelationId() {
+        UUID id = UUID.randomUUID();
+        Notification n = new Notification();
+        n.setNotificationId(id);
+        DeliveryStatusCallback cb = new DeliveryStatusCallback();
+        cb.setNotificationId(id);
+        cb.setStatus("DELIVERED");
+        cb.setCorrelationId("corr-callback");
+        when(repo.findById(id)).thenReturn(Optional.of(n));
+        when(repo.save(n)).thenAnswer(inv -> {
+            assert CorrelationIds.current().equals("corr-callback");
+            return n;
+        });
+
+        controller.handleCallback(cb);
+
+        assert n.getStatus() == Notification.Status.DELIVERED;
     }
 }

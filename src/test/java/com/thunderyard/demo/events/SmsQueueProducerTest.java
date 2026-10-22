@@ -1,5 +1,6 @@
 package com.thunderyard.demo.events;
 
+import com.thunderyard.demo.config.CorrelationIds;
 import com.thunderyard.demo.config.KafkaTopics;
 import com.thunderyard.demo.notifications.Notification;
 import com.thunderyard.demo.sms.SmsJob;
@@ -42,5 +43,30 @@ class SmsQueueProducerTest {
         assertThat(job.getNotificationId()).isEqualTo(notification.getNotificationId());
         assertThat(job.getCorrelationId()).isEqualTo("corr-" + notification.getEventId());
         assertThat(job.getRetryCount()).isZero();
+    }
+
+    @Test
+    void usesMdcCorrelationIdWhenPresent() {
+        @SuppressWarnings("unchecked")
+        KafkaTemplate<String, SmsJob> kafka = mock(KafkaTemplate.class);
+        when(kafka.send(any(), any(), any())).thenReturn(CompletableFuture.completedFuture(null));
+        SmsQueueProducer producer = new SmsQueueProducer(kafka);
+
+        Notification notification = new Notification();
+        notification.setNotificationId(UUID.randomUUID());
+        notification.setEventId(UUID.randomUUID());
+        notification.setAppointmentId(UUID.randomUUID());
+        notification.setPatientId(UUID.randomUUID());
+
+        CorrelationIds.open("corr-from-http");
+        try {
+            producer.publishSmsJob(notification);
+        } finally {
+            CorrelationIds.close();
+        }
+
+        ArgumentCaptor<SmsJob> jobCaptor = ArgumentCaptor.forClass(SmsJob.class);
+        verify(kafka).send(eq(KafkaTopics.SMS_JOBS), any(), jobCaptor.capture());
+        assertThat(jobCaptor.getValue().getCorrelationId()).isEqualTo("corr-from-http");
     }
 }

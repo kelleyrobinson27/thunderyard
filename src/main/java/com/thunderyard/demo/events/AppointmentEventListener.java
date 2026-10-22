@@ -1,5 +1,6 @@
 package com.thunderyard.demo.events;
 
+import com.thunderyard.demo.config.CorrelationIds;
 import com.thunderyard.demo.config.KafkaTopics;
 import com.thunderyard.demo.notifications.Notification;
 import com.thunderyard.demo.notifications.NotificationMetrics;
@@ -37,9 +38,18 @@ public class AppointmentEventListener {
 
     @KafkaListener(topics = KafkaTopics.APPOINTMENT_EVENTS, groupId = "notification-service")
     public void handleEvent(AppointmentChangedEvent event) {
+        boolean owned = CorrelationIds.openIfAbsent(CorrelationIds.fromEventId(event.eventId()));
+        try {
+            handleChanged(event);
+        } finally {
+            if (owned) {
+                CorrelationIds.close();
+            }
+        }
+    }
 
-        // 0. Persist event
-        eventStore.persist(event);   // <-- NEW
+    private void handleChanged(AppointmentChangedEvent event) {
+        eventStore.persist(event);
 
         // 1. Idempotency check
         Optional<Notification> existing = notificationRepository.findByEventId(event.eventId());

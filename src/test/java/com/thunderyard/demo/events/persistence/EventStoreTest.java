@@ -1,6 +1,8 @@
 package com.thunderyard.demo.events.persistence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.thunderyard.demo.config.CorrelationIds;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -16,6 +18,11 @@ class EventStoreTest {
     static class DummyEvent {
         public String name = "test-event";
         public int value = 42;
+    }
+
+    @AfterEach
+    void clearMdc() {
+        CorrelationIds.close();
     }
 
     @Test
@@ -38,5 +45,18 @@ class EventStoreTest {
         assert saved.getPayload().contains("\"value\":42");
         assert saved.getCreatedAt() != null;
         assert saved.getReceivedAt() != null;
+    }
+
+    @Test
+    void copiesCorrelationIdFromMdc() throws Exception {
+        DummyEvent evt = new DummyEvent();
+        when(mapper.writeValueAsString(evt)).thenReturn("{}");
+        CorrelationIds.open("corr-from-mdc");
+
+        store.persist(evt);
+
+        ArgumentCaptor<EventEntity> captor = ArgumentCaptor.forClass(EventEntity.class);
+        verify(repo).save(captor.capture());
+        assert captor.getValue().getCorrelationId().equals("corr-from-mdc");
     }
 }
