@@ -15,20 +15,30 @@ This repo is a design-and-demo implementation of a notification pipeline that ca
 7. Send via a mocked SMS provider, retry transient failures, and dead-letter exhausted jobs.
 8. Accept delivery-status callbacks and update notification state.
 
+Kafka sits **between “decide to notify” and “call the SMS vendor.”** The HTTP handler produces a `SmsJob` onto a durable topic and returns. A separate consumer sends, retries by re-producing, and dead-letters poison work so it does not block the main queue.
+
 ```mermaid
-flowchart LR
-  EventBus["Appointment events<br/>HTTP or Kafka"] --> Listener["AppointmentEventListener"]
-  Listener --> Store["Event store<br/>PostgreSQL"]
-  Listener --> Idempotency["Idempotency<br/>notifications.event_id"]
-  Idempotency --> EAS["EAS client<br/>Resilience4j"]
+flowchart TB
+  HTTP["POST /events/appointment-*"] --> Listener["AppointmentEventListener"]
+  Bus["Kafka topic appointment-events<br/>optional ingest, same listener"] --> Listener
+  Listener --> Store["PostgreSQL<br/>events + notifications"]
+  Listener --> EAS["EAS client"]
   EAS --> Decide{"Should notify?"}
-  Decide -->|no| Suppressed["Status SUPPRESSED"]
-  Decide -->|yes| Queued["Status QUEUED"]
-  Queued --> SmsQueue["SMS job queue"]
-  SmsQueue --> SmsWorker["SmsWorker"]
-  SmsWorker --> Provider["SMS provider<br/>mocked"]
-  SmsWorker --> DLQ["sms-jobs-dlq"]
-  Provider --> Callback["POST /sms/callback"]
+  Decide -->|no| Suppressed["SUPPRESSED<br/>nothing published"]
+  Decide -->|yes| Producer["SmsQueueProducer<br/>notification status QUEUED"]
+
+  subgraph Broker["Apache Kafka broker — append-only topics, not the SMS API"]
+    Jobs["sms-jobs<br/>3 partitions · record key = appointmentId<br/>same appointment stays ordered"]
+    DLQ["sms-jobs-dlq<br/>retries exhausted"]
+  end
+
+  Producer -->|"produce SmsJob, then HTTP 200"| Jobs
+  Jobs --> Worker["SmsWorker<br/>consumer group notification-service"]
+  Worker --> Provider["Mock SMS provider"]
+  Worker -->|"transient fail, retryCount ≤ 3<br/>produce the job again"| Jobs
+  Worker -->|"still failing after 3"| DLQ
+  DLQ --> DlqWorker["DlqWorker<br/>holds the job; sms-jobs keeps draining"]
+  Provider --> Callback["later POST /sms/callback → DELIVERED"]
 ```
 
 ## Tech stack
