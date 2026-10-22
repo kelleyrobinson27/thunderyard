@@ -33,6 +33,9 @@ public class SecurityConfig {
                         // Allow all appointment event POST endpoints
                         .requestMatchers(HttpMethod.POST, "/events/appointment-**").permitAll()
 
+                        // Public JWKS (the private key stays in this process; Okta would host this)
+                        .requestMatchers(HttpMethod.GET, "/oauth2/jwks").permitAll()
+
                         // Everything else requires authentication (Basic or JWT)
                         .anyRequest().authenticated()
                 )

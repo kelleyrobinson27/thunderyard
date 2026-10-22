@@ -190,7 +190,9 @@ Curl suites in `src/test/curl/` (these are the only HTTP scripts):
 - `runAll9Jwt.sh` — `/sms/callback` 401 / 404 / 200 DELIVERED with HS256 JWT (needs Kafka for the 200)
 - `runAll10Trace.sh` — W3C `traceparent` echoed as `traceresponse` / `X-Trace-Id` (CANCELLED, no Kafka)
 - `runAll11KafkaTrace.sh` — inbound `traceparent` persisted on the notification and carried on `sms-jobs` (needs Kafka)
-- `runAllEvents.sh` / `runAllAppointmentEvents.sh` — wrappers that run `runAll1Http.sh`
+- `runAll12Jwks.sh` — `GET /oauth2/jwks`, `POST /oauth2/token` (Basic), RS256 Bearer on `/sms/callback`
+- `runAll.sh` — runs numbered suites; one `PASS`/`FAIL` line each
+- `runAllEvents.sh` / `runAllAppointmentEvents.sh` — aliases for `runAll1Http.sh` (not included in `runAll.sh`)
 
 ### Event log and replay
 
@@ -233,6 +235,13 @@ curl -u demo:demo -X POST http://localhost:8080/sms/callback \
 
 `status` values handled: `DELIVERED`, `FAILED`, `UNDELIVERABLE`.
 
+Callback auth is HTTP Basic **or** `Authorization: Bearer`. Mint an RS256 token (stand-in for Okta) with Basic against `/oauth2/token`; verify the public key at `GET /oauth2/jwks` (no auth).
+
+```bash
+curl -u demo:demo -X POST http://localhost:8080/oauth2/token
+curl http://localhost:8080/oauth2/jwks
+```
+
 ## Kafka topics
 
 | Topic | Role |
@@ -256,7 +265,7 @@ Consumer group: `notification-service`. Multiple pods can share the group; idemp
 | Delivery callbacks | `QUEUED → SENT → DELIVERED` (or `FAILED`) |
 | Opt-in | `AppointmentDetails.canNotify` from EAS; cancel events suppressed |
 | Minimal PHI | Mock phone/message; avoid logging full payloads in production |
-| Auth | HTTP Basic for the demo; SMS callback also accepts HS256 JWT (`thunderyard.jwt.secret`). Production: TLS, JWKS, workload identity |
+| Auth | HTTP Basic; `/sms/callback` also accepts HS256 (shared secret) or RS256 from `POST /oauth2/token`, verified against `GET /oauth2/jwks`. Production: Okta/JWKS, mTLS, workload identity |
 | Health | Actuator `health`, `liveness`, `readiness`; graceful Tomcat shutdown (20s) |
 | Metrics | `notifications_queued/sent/delivered/failed/retried/duplicated/suppressed_total` |
 | Tracing | `X-Correlation-Id` plus W3C `traceparent` on HTTP (`X-Trace-Id` / `traceresponse`); same `traceparent` on `SmsJob` and `notifications.trace_id` |
@@ -273,11 +282,11 @@ Unit and slice tests live under `src/test/java`:
 - `DeliveryCallbackControllerTest`
 - `NotificationMetricsTest`, `NotificationControllerTest`
 - `CorrelationIdsTest`, `CorrelationFilterTest`, `TraceContextTest`
-- `JwtConfigTest`
+- `JwtConfigTest`, `DemoJwtKeysTest`, `OAuth2DemoControllerTest`
 
 HTTP demos: `src/test/curl/runAll*.sh`.
 
 ## Known gaps / next
 
 - No Zipkin/OTel exporter yet; HTTP and Kafka `SmsJob` carry W3C `traceparent` in MDC (`IllegalArgumentException` → 400, `ReplayTooLargeException` → 413).
-- Production auth is still a demo HMAC JWT (no JWKS, mTLS, or workload identity).
+- Production auth would replace the in-process RSA key + `/oauth2/token` with Okta (or similar) JWKS, mTLS, or workload identity. HMAC remains for `runAll9Jwt`.

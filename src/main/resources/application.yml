@@ -104,7 +104,7 @@ resilience4j:
       eas:
         timeout-duration: 2s
 
-# Local demo HMAC secret (32+ chars). Production would use JWKS / workload identity.
+# Local demo HMAC secret (32+ chars). RS256/JWKS is also wired (in-process key). Production: Okta JWKS.
 thunderyard:
   jwt:
     secret: thunderyard-demo-hmac-secret-key-32
