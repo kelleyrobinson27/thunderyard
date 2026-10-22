@@ -2,7 +2,12 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %5p ${PID:- } --- [%t] [%X{correlationId:-}] %-40.40logger{39} : %msg%n"
 
+server:
+  shutdown: graceful
+
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
   profiles:
     active: local
 
@@ -58,8 +63,15 @@ management:
         include: health,info,metrics,prometheus
   endpoint:
     health:
-      show-details: when_authorized
+      probes:
+        enabled: true
+      show-details: always
     prometheus:
+      enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
       enabled: true
   prometheus:
     metrics:

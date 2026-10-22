@@ -175,6 +175,7 @@ Curl suites in `src/test/curl/` (these are the only HTTP scripts):
 - `runAll4Sms.sh` — SMS success vs retryable timeout vs permanent failure, plus callback 404 (needs Kafka)
 - `runAll5Metrics.sh` — `/actuator/health`, `/actuator/metrics`, Prometheus notification counters
 - `runAll6Tracing.sh` — `X-Correlation-Id` echo + persist (`GET /events?correlationId=`)
+- `runAll7Probes.sh` — `/actuator/health`, `/liveness`, `/readiness` (readiness wants Postgres + Kafka)
 - `runAllEvents.sh` / `runAllAppointmentEvents.sh` — wrappers that run `runAll1Http.sh`
 
 ### Event log and replay
@@ -236,7 +237,7 @@ Consumer group: `notification-service`. Multiple pods can share the group; idemp
 | Opt-in | `AppointmentDetails.canNotify` from EAS; cancel events suppressed |
 | Minimal PHI | Mock phone/message; avoid logging full payloads in production |
 | Auth | HTTP Basic for the demo; production would use TLS, JWT, workload identity |
-| Health | Actuator `health`, `metrics`, `prometheus` at `/actuator/**` |
+| Health | Actuator `health`, `liveness`, `readiness`; graceful Tomcat shutdown (20s) |
 | Metrics | `notifications_queued/sent/delivered/failed/retried/duplicated/suppressed_total` |
 | Tracing | `X-Correlation-Id` (or generated UUID) in MDC, event row, SMS job, and logs |
 
@@ -259,4 +260,4 @@ HTTP demos: `src/test/curl/runAll*.sh`.
 
 - Typed appointment events other than `AppointmentChangedEvent` persist but do not run the full notify pipeline.
 - No Zipkin/OTel exporter yet; correlation is MDC + header + stored `correlationId` (`IllegalArgumentException` → 400, `ReplayTooLargeException` → 413).
-- Production auth (JWT/mTLS), secrets, and EKS probes are design topics, not fully implemented here.
+- Production auth (JWT/mTLS), secrets, and workload identity are design topics, not fully implemented here.
