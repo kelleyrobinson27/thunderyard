@@ -201,6 +201,7 @@ Curl suites in `src/test/curl/` (these are the only HTTP scripts):
 - `runAll12Jwks.sh` — `GET /oauth2/jwks`, `POST /oauth2/token` (Basic), RS256 Bearer on `/sms/callback`
 - `runAll.sh` — runs numbered suites; one `PASS`/`FAIL` line each
 - `runAllEvents.sh` / `runAllAppointmentEvents.sh` — aliases for `runAll1Http.sh` (not included in `runAll.sh`)
+- `apptFlow.sh` — manual create → change → cancel for one appointment; pauses so you can clear logs (needs Kafka; not in `runAll.sh`)
 
 ### Event log and replay
 

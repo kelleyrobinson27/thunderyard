@@ -42,7 +42,7 @@ public class SmsQueueProducer {
             log.error("Failed to queue SMS job correlationId={}", job.getCorrelationId(), e);
             throw new IllegalStateException("Failed to publish SMS job to Kafka", e);
         }
-        log.info("Queued SMS job notificationId={} correlationId={}",
-                job.getNotificationId(), job.getCorrelationId());
+        log.info("Queued SMS job notificationId={} correlationId={} eventId={}",
+                job.getNotificationId(), job.getCorrelationId(), notification.getEventId());
     }
 }
