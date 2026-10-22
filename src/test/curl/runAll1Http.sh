@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# Run the curl demos that form a reasonable suite against a running app
-# on http://localhost:8080. Prints PASS/FAIL per case and a summary.
+# HTTP ingest / validation / list / replay. Kafka is not required.
+# On http://localhost:8080. Prints PASS/FAIL per case and a summary.
 #
 # Skipped on purpose:
 #   runAllEvents.sh / runAllAppointmentEvents.sh  — nested aggregators
@@ -128,7 +128,7 @@ run_replay() {
   fi
 }
 
-echo "ThunderYard curl suite  ($BASE)"
+echo "ThunderYard HTTP suite  ($BASE)"
 echo
 
 # --- Happy-path appointment events (expect 200) ---

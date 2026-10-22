@@ -169,8 +169,9 @@ curl -u demo:demo -X POST http://localhost:8080/events/appointment-changed \
 
 Ready-made scripts in `src/test/curl/`:
 
-- `runAll.sh` — ingest, validation, list, replay (200, or 500 if more than 50 events)
-- `runAll2.sh` — SMS queue path (CREATED / duplicate / UPDATED / CANCELLED); needs Kafka
+- `runAll1Http.sh` — ingest, validation, list, replay (200, or 500 if more than 50 events); Kafka not required
+- `runAll2Kafka.sh` — SMS queue path (CREATED / duplicate / UPDATED / CANCELLED); needs Kafka
+- `runAll3Eas.sh` — EAS opt-in vs reserved opt-out `appointmentId`
 
 ### Event log and replay
 

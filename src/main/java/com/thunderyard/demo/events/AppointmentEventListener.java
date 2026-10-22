@@ -71,6 +71,10 @@ public class AppointmentEventListener {
     }
 
     private boolean shouldNotify(AppointmentChangedEvent event, AppointmentDetails appointment) {
+        if (!appointment.canNotify()) {
+            log.info("Suppressing eventId={} — EAS canNotify=false", event.eventId());
+            return false;
+        }
         return switch (event.eventType()) {
             case CREATED, UPDATED -> true;
             case CANCELLED -> false;

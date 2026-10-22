@@ -133,4 +133,32 @@ class AppointmentEventListenerTest {
         verify(smsProducer).publishSmsJob(any(Notification.class));
         verify(eventStore).persist(evt);   // <-- NEW
     }
+
+    @Test
+    void suppressesWhenEasSaysCannotNotify() {
+        UUID eventId = UUID.randomUUID();
+        UUID appointmentId = UUID.randomUUID();
+        UUID patientId = UUID.randomUUID();
+
+        AppointmentChangedEvent evt = event(
+                eventId,
+                appointmentId,
+                patientId,
+                AppointmentChangedEvent.EventType.UPDATED
+        );
+
+        when(repo.findByEventId(eventId)).thenReturn(Optional.empty());
+        when(easClient.getAppointment(appointmentId)).thenReturn(
+                CompletableFuture.completedFuture(
+                        new AppointmentDetails(appointmentId, "Dr. Smith", "2026-10-20", false)
+                )
+        );
+
+        listener.handleEvent(evt);
+
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(repo).save(captor.capture());
+        assert captor.getValue().getStatus() == Notification.Status.SUPPRESSED;
+        verify(smsProducer, never()).publishSmsJob(any());
+    }
 }

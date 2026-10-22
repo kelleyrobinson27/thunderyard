@@ -50,11 +50,11 @@ post_changed() {
   echo "=== $name ==="
   echo "eventId=$event_id  type=$event_type"
   local code
-  code=$(curl -s --max-time 20 -o /tmp/thunderyard-runAll2-body.txt -w "%{http_code}" \
+  code=$(curl -s --max-time 20 -o /tmp/thunderyard-runAll2Kafka-body.txt -w "%{http_code}" \
     "${AUTH[@]}" \
     -X POST "$BASE/events/appointment-changed" \
     -H "Content-Type: application/json" \
-    -d "{\"eventId\":\"$event_id\",\"appointmentId\":\"$appointment_id\",\"patientId\":\"$patient_id\",\"eventType\":\"$event_type\",\"timestamp\":\"2026-10-21T17:00:00Z\",\"source\":\"runAll2\"}" \
+    -d "{\"eventId\":\"$event_id\",\"appointmentId\":\"$appointment_id\",\"patientId\":\"$patient_id\",\"eventType\":\"$event_type\",\"timestamp\":\"2026-10-21T17:00:00Z\",\"source\":\"runAll2Kafka\"}" \
     || true)
   record "$name" "$code" 200
 }

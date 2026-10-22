@@ -4,9 +4,9 @@ import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.UUID;
@@ -16,12 +16,20 @@ import java.util.concurrent.CompletableFuture;
 @Component
 public class EasClient {
 
-    private final WebClient webClient;
+    /** Stub opt-out appointment id for local curl (canNotify=false). */
+    public static final UUID OPT_OUT_APPOINTMENT_ID =
+            UUID.fromString("00000000-0000-0000-0000-00000000ffff");
 
-    public EasClient() {
-        // WebClient is the modern, non-blocking HTTP client for Spring Boot
+    private final WebClient webClient;
+    private final boolean stub;
+
+    public EasClient(
+            @Value("${eas.base-url:http://localhost:8081}") String baseUrl,
+            @Value("${eas.stub:false}") boolean stub
+    ) {
+        this.stub = stub;
         this.webClient = WebClient.builder()
-                .baseUrl("http://localhost:8081") // mock EAS service
+                .baseUrl(baseUrl)
                 .build();
     }
 
@@ -40,6 +48,14 @@ public class EasClient {
     @Retry(name = "eas")
     @CircuitBreaker(name = "eas", fallbackMethod = "fallbackAppointment")
     public CompletableFuture<AppointmentDetails> getAppointment(UUID appointmentId) {
+
+        if (stub) {
+            boolean canNotify = !OPT_OUT_APPOINTMENT_ID.equals(appointmentId);
+            log.info("EAS stub canNotify={} for appointment {}", canNotify, appointmentId);
+            return CompletableFuture.completedFuture(
+                    new AppointmentDetails(appointmentId, "Local clinic", "2026-10-22", canNotify)
+            );
+        }
 
         log.info("Calling EAS for appointment {}", appointmentId);
 
