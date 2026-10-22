@@ -2,6 +2,7 @@ package com.thunderyard.demo.events;
 
 import com.thunderyard.demo.config.CorrelationIds;
 import com.thunderyard.demo.config.KafkaTopics;
+import com.thunderyard.demo.config.TraceContext;
 import com.thunderyard.demo.notifications.Notification;
 import com.thunderyard.demo.notifications.NotificationMetrics;
 import com.thunderyard.demo.notifications.NotificationRepository;
@@ -77,6 +78,17 @@ public class AppointmentEventListener {
     }
 
     private void notifyIfEligible(UUID eventId, UUID appointmentId, UUID patientId, boolean typeAllowsNotify) {
+        boolean ownedTrace = TraceContext.openIfAbsent();
+        try {
+            notifyIfEligibleWithTrace(eventId, appointmentId, patientId, typeAllowsNotify);
+        } finally {
+            if (ownedTrace) {
+                TraceContext.close();
+            }
+        }
+    }
+
+    private void notifyIfEligibleWithTrace(UUID eventId, UUID appointmentId, UUID patientId, boolean typeAllowsNotify) {
         Optional<Notification> existing = notificationRepository.findByEventId(eventId);
         if (existing.isPresent()) {
             metrics.duplicated();
@@ -94,6 +106,7 @@ public class AppointmentEventListener {
             suppressed.setAppointmentId(appointmentId);
             suppressed.setPatientId(patientId);
             suppressed.setStatus(Notification.Status.SUPPRESSED);
+            suppressed.setTraceId(TraceContext.currentTraceId());
             notificationRepository.save(suppressed);
             metrics.suppressed();
             return;
@@ -104,6 +117,7 @@ public class AppointmentEventListener {
         notification.setAppointmentId(appointmentId);
         notification.setPatientId(patientId);
         notification.setStatus(Notification.Status.QUEUED);
+        notification.setTraceId(TraceContext.currentTraceId());
         notification = notificationRepository.save(notification);
 
         smsQueueProducer.publishSmsJob(notification);

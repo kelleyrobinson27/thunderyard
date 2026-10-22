@@ -16,6 +16,8 @@ public class JwtConfig {
     @Bean
     public JwtDecoder jwtDecoder(@Value("${thunderyard.jwt.secret}") String secret) {
         SecretKeySpec key = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+        // In prod, you would swap out below .withSecretKey(key) with something like:
+        // .withJwkSetUri("https://okta…/oauth2/default/v1/keys")
         return NimbusJwtDecoder.withSecretKey(key).macAlgorithm(MacAlgorithm.HS256).build();
     }
 }

@@ -32,7 +32,7 @@ flowchart TB
     DLQ["sms-jobs-dlq<br/>retries exhausted"]
   end
 
-  Producer -->|"produce SmsJob, then HTTP 200"| Jobs
+  Producer -->|"produce SmsJob (incl. traceparent), then HTTP 200"| Jobs
   Jobs --> Worker["SmsWorker<br/>consumer group notification-service"]
   Worker --> Provider["Mock SMS provider"]
   Worker -->|"transient fail, retryCount ≤ 3<br/>produce the job again"| Jobs
@@ -63,7 +63,7 @@ flowchart TB
 
 ## Docker: local Kafka
 
-SMS is **not** sent on the HTTP request thread. After a `CREATED`/`UPDATED` appointment-change, the listener saves a `QUEUED` notification and publishes an `SmsJob` to Kafka topic `sms-jobs`. `SmsWorker` consumes that topic, talks to the mocked SMS provider, and updates status (`SENT`, retry, or DLQ).
+SMS is **not** sent on the HTTP request thread. After a `CREATED`/`UPDATED` appointment-change, the listener saves a `QUEUED` notification (including `traceId` from W3C `traceparent`) and publishes an `SmsJob` to Kafka topic `sms-jobs`. `SmsWorker` consumes that topic, restores the same `traceparent` into MDC, talks to the mocked SMS provider, and updates status (`SENT`, retry, or DLQ).
 
 Without a broker on `localhost:9092` that path fails: the producer waits for topic metadata (`Topic sms-jobs not present in metadata`) and the request returns **500**. Duplicate `eventId`s can still return **200** because the notification row was saved *before* the Kafka send.
 
@@ -142,9 +142,9 @@ curl -u demo:demo ...
 | Dedupe | `NotificationRepository.findByEventId` | Duplicate `AppointmentChangedEvent` is dropped |
 | EAS | `EasClient` | GET `http://localhost:8081/appointments/{id}` |
 | Decide | `shouldNotify` | `CREATED` / `UPDATED` notify; `CANCELLED` suppressed |
-| Queue SMS | `SmsQueueProducer` | Publishes `SmsJob` to `sms-jobs` (keyed by `appointmentId`) |
-| Send | `SmsWorker` | Listens on `sms-jobs`; retries then DLQ |
-| DLQ | `DlqWorker` | Listens on `sms-jobs-dlq` |
+| Queue SMS | `SmsQueueProducer` | Publishes `SmsJob` to `sms-jobs` (keyed by `appointmentId`; `traceparent` copied from MDC) |
+| Send | `SmsWorker` | Listens on `sms-jobs`; restores MDC from job; retries then DLQ |
+| DLQ | `DlqWorker` | Listens on `sms-jobs-dlq` (same MDC restore) |
 | Callback | `DeliveryCallbackController` | `POST /sms/callback` |
 
 Notification statuses: `QUEUED`, `SENT`, `DELIVERED`, `FAILED`, `RETRIED`, `DUPLICATE`, `SUPPRESSED`.
@@ -188,7 +188,8 @@ Curl suites in `src/test/curl/` (these are the only HTTP scripts):
 - `runAll7Probes.sh` — `/actuator/health`, `/liveness`, `/readiness` (readiness wants Postgres + Kafka)
 - `runAll8Typed.sh` — reminder / created / status / confirmation queue SMS; typed cancel suppressed (needs Kafka)
 - `runAll9Jwt.sh` — `/sms/callback` 401 / 404 / 200 DELIVERED with HS256 JWT (needs Kafka for the 200)
-- `runAll10Trace.sh` — W3C `traceparent` echoed as `traceresponse` / `X-Trace-Id`
+- `runAll10Trace.sh` — W3C `traceparent` echoed as `traceresponse` / `X-Trace-Id` (CANCELLED, no Kafka)
+- `runAll11KafkaTrace.sh` — inbound `traceparent` persisted on the notification and carried on `sms-jobs` (needs Kafka)
 - `runAllEvents.sh` / `runAllAppointmentEvents.sh` — wrappers that run `runAll1Http.sh`
 
 ### Event log and replay
@@ -237,8 +238,8 @@ curl -u demo:demo -X POST http://localhost:8080/sms/callback \
 | Topic | Role |
 |-------|------|
 | `appointment-events` | Incoming appointment bus (`AppointmentChangedEvent`) |
-| `sms-jobs` | SMS work + retries (max 3) |
-| `sms-jobs-dlq` | Jobs that exhausted retries |
+| `sms-jobs` | SMS work + retries (max 3). `SmsJob.traceparent` is the HTTP W3C id so `SmsWorker` logs the same `traceId`. |
+| `sms-jobs-dlq` | Jobs that exhausted retries (same `traceparent` on the payload) |
 
 Consumer group: `notification-service`. Multiple pods can share the group; idempotency on `eventId` is what makes concurrent consumption safe.
 
@@ -258,7 +259,7 @@ Consumer group: `notification-service`. Multiple pods can share the group; idemp
 | Auth | HTTP Basic for the demo; SMS callback also accepts HS256 JWT (`thunderyard.jwt.secret`). Production: TLS, JWKS, workload identity |
 | Health | Actuator `health`, `liveness`, `readiness`; graceful Tomcat shutdown (20s) |
 | Metrics | `notifications_queued/sent/delivered/failed/retried/duplicated/suppressed_total` |
-| Tracing | `X-Correlation-Id` plus W3C `traceparent` (`X-Trace-Id` / `traceresponse` in MDC and logs) |
+| Tracing | `X-Correlation-Id` plus W3C `traceparent` on HTTP (`X-Trace-Id` / `traceresponse`); same `traceparent` on `SmsJob` and `notifications.trace_id` |
 
 ## Tests
 
@@ -278,5 +279,5 @@ HTTP demos: `src/test/curl/runAll*.sh`.
 
 ## Known gaps / next
 
-- No Zipkin/OTel exporter yet; HTTP carries W3C `traceparent` in MDC (`IllegalArgumentException` → 400, `ReplayTooLargeException` → 413).
+- No Zipkin/OTel exporter yet; HTTP and Kafka `SmsJob` carry W3C `traceparent` in MDC (`IllegalArgumentException` → 400, `ReplayTooLargeException` → 413).
 - Production auth is still a demo HMAC JWT (no JWKS, mTLS, or workload identity).

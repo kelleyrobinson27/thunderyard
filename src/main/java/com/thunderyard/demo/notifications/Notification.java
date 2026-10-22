@@ -30,6 +30,9 @@ public class Notification {
 
     private String failureReason;
 
+    @Column(length = 32)
+    private String traceId;
+
     private Instant createdAt;
     private Instant updatedAt;
 

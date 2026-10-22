@@ -2,6 +2,7 @@ package com.thunderyard.demo.events;
 
 import com.thunderyard.demo.config.CorrelationIds;
 import com.thunderyard.demo.config.KafkaTopics;
+import com.thunderyard.demo.config.TraceContext;
 import com.thunderyard.demo.notifications.Notification;
 import com.thunderyard.demo.sms.SmsJob;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,7 @@ class SmsQueueProducerTest {
         SmsJob job = jobCaptor.getValue();
         assertThat(job.getNotificationId()).isEqualTo(notification.getNotificationId());
         assertThat(job.getCorrelationId()).isEqualTo("corr-" + notification.getEventId());
+        assertThat(job.getTraceparent()).matches("^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$");
         assertThat(job.getRetryCount()).isZero();
     }
 
@@ -69,6 +71,32 @@ class SmsQueueProducerTest {
         ArgumentCaptor<SmsJob> jobCaptor = ArgumentCaptor.forClass(SmsJob.class);
         verify(kafka).send(eq(KafkaTopics.SMS_JOBS), any(), jobCaptor.capture());
         assertThat(jobCaptor.getValue().getCorrelationId()).isEqualTo("corr-from-http");
+    }
+
+    @Test
+    void copiesInboundTraceparentOntoSmsJob() {
+        @SuppressWarnings("unchecked")
+        KafkaTemplate<String, SmsJob> kafka = mock(KafkaTemplate.class);
+        when(kafka.send(any(), any(), any())).thenReturn(CompletableFuture.completedFuture(null));
+        SmsQueueProducer producer = new SmsQueueProducer(kafka);
+
+        Notification notification = new Notification();
+        notification.setNotificationId(UUID.randomUUID());
+        notification.setEventId(UUID.randomUUID());
+        notification.setAppointmentId(UUID.randomUUID());
+        notification.setPatientId(UUID.randomUUID());
+
+        String header = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        TraceContext.open(TraceContext.parseOrCreate(header));
+        try {
+            producer.publishSmsJob(notification);
+        } finally {
+            TraceContext.close();
+        }
+
+        ArgumentCaptor<SmsJob> jobCaptor = ArgumentCaptor.forClass(SmsJob.class);
+        verify(kafka).send(eq(KafkaTopics.SMS_JOBS), any(), jobCaptor.capture());
+        assertThat(jobCaptor.getValue().getTraceparent()).isEqualTo(header);
     }
 
     @Test

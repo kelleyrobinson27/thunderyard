@@ -1,6 +1,7 @@
 package com.thunderyard.demo.sms;
 
 import com.thunderyard.demo.config.CorrelationIds;
+import com.thunderyard.demo.config.TraceContext;
 import com.thunderyard.demo.notifications.Notification;
 import com.thunderyard.demo.notifications.NotificationMetrics;
 import com.thunderyard.demo.notifications.NotificationRepository;
@@ -26,6 +27,7 @@ class SmsWorkerTest {
     @AfterEach
     void clearMdc() {
         CorrelationIds.close();
+        TraceContext.close();
     }
 
     @Test
@@ -107,6 +109,28 @@ class SmsWorkerTest {
         worker.handleSmsJob(job);
 
         assert CorrelationIds.current() == null;
+    }
+
+    @Test
+    void putsJobTraceparentInMdcWhileSending() {
+        UUID id = UUID.randomUUID();
+        Notification n = new Notification();
+        n.setNotificationId(id);
+        String header = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        SmsJob job = SmsJob.builder()
+                .notificationId(id)
+                .traceparent(header)
+                .retryCount(0)
+                .build();
+        when(repo.findById(id)).thenReturn(Optional.of(n));
+        when(provider.sendSms(job)).thenAnswer(inv -> {
+            assert TraceContext.currentTraceId().equals("4bf92f3577b34da6a3ce929d0e0e4736");
+            return true;
+        });
+
+        worker.handleSmsJob(job);
+
+        assert TraceContext.currentTraceId() == null;
     }
 
     @Test

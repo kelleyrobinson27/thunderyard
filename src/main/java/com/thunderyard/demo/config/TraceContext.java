@@ -13,6 +13,7 @@ public final class TraceContext {
     public static final String X_TRACE_ID = "X-Trace-Id";
     public static final String MDC_TRACE = "traceId";
     public static final String MDC_SPAN = "spanId";
+    public static final String MDC_PARENT = "traceparent";
 
     private static final Pattern TRACEPARENT_PATTERN = Pattern.compile(
             "^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$"
@@ -45,15 +46,43 @@ public final class TraceContext {
     public static void open(Parsed parsed) {
         MDC.put(MDC_TRACE, parsed.traceId());
         MDC.put(MDC_SPAN, parsed.spanId());
+        MDC.put(MDC_PARENT, parsed.asTraceparent());
+    }
+
+    public static boolean openIfAbsent() {
+        if (currentTraceparent() != null && !currentTraceparent().isBlank()) {
+            return false;
+        }
+        open(parseOrCreate(null));
+        return true;
     }
 
     public static String currentTraceId() {
         return MDC.get(MDC_TRACE);
     }
 
+    public static String currentTraceparent() {
+        return MDC.get(MDC_PARENT);
+    }
+
+    public static void run(String traceparent, Runnable work) {
+        boolean owned = currentTraceparent() == null || currentTraceparent().isBlank();
+        if (owned) {
+            open(parseOrCreate(traceparent));
+        }
+        try {
+            work.run();
+        } finally {
+            if (owned) {
+                close();
+            }
+        }
+    }
+
     public static void close() {
         MDC.remove(MDC_TRACE);
         MDC.remove(MDC_SPAN);
+        MDC.remove(MDC_PARENT);
     }
 
     public static String newTraceId() {

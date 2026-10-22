@@ -2,6 +2,7 @@ package com.thunderyard.demo.events;
 
 import com.thunderyard.demo.config.CorrelationIds;
 import com.thunderyard.demo.config.KafkaTopics;
+import com.thunderyard.demo.config.TraceContext;
 import com.thunderyard.demo.notifications.Notification;
 import com.thunderyard.demo.sms.SmsJob;
 import org.slf4j.Logger;
@@ -29,6 +30,7 @@ public class SmsQueueProducer {
                 .phoneNumber("555-123-4567")
                 .messageBody("Your appointment has been updated.")
                 .correlationId(CorrelationIds.currentOr(CorrelationIds.fromEventId(notification.getEventId())))
+                .traceparent(TraceContext.parseOrCreate(TraceContext.currentTraceparent()).asTraceparent())
                 .retryCount(0)
                 .build();
 

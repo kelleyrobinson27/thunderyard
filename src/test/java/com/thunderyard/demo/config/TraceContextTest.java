@@ -39,7 +39,25 @@ class TraceContextTest {
                 "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
         TraceContext.open(parsed);
         assertThat(TraceContext.currentTraceId()).isEqualTo(parsed.traceId());
+        assertThat(TraceContext.currentTraceparent()).isEqualTo(parsed.asTraceparent());
         TraceContext.close();
+        assertThat(TraceContext.currentTraceId()).isNull();
+        assertThat(TraceContext.currentTraceparent()).isNull();
+    }
+
+    @Test
+    void openIfAbsentKeepsExisting() {
+        String header = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        TraceContext.open(TraceContext.parseOrCreate(header));
+        assertThat(TraceContext.openIfAbsent()).isFalse();
+        assertThat(TraceContext.currentTraceparent()).isEqualTo(header);
+    }
+
+    @Test
+    void runOpensFromTraceparentThenClears() {
+        String header = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        TraceContext.run(header, () ->
+                assertThat(TraceContext.currentTraceId()).isEqualTo("4bf92f3577b34da6a3ce929d0e0e4736"));
         assertThat(TraceContext.currentTraceId()).isNull();
     }
 }

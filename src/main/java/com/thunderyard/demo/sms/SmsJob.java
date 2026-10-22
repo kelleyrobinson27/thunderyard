@@ -17,6 +17,7 @@ public class SmsJob {
     private String phoneNumber;
     private String messageBody;
     private String correlationId;
+    private String traceparent;
     private int retryCount;
 
     public SmsJob withRetryCount(int newCount) {

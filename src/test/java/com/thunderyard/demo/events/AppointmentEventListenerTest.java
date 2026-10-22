@@ -1,6 +1,7 @@
 package com.thunderyard.demo.events;
 
 import com.thunderyard.demo.config.CorrelationIds;
+import com.thunderyard.demo.config.TraceContext;
 import com.thunderyard.demo.notifications.Notification;
 import com.thunderyard.demo.notifications.NotificationMetrics;
 import com.thunderyard.demo.notifications.NotificationRepository;
@@ -43,6 +44,7 @@ class AppointmentEventListenerTest {
     @AfterEach
     void clearMdc() {
         CorrelationIds.close();
+        TraceContext.close();
     }
 
     private AppointmentChangedEvent event(
@@ -138,9 +140,37 @@ class AppointmentEventListenerTest {
 
         listener.handleEvent(evt);
 
-        verify(repo).save(any(Notification.class));
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(repo).save(captor.capture());
         verify(smsProducer).publishSmsJob(any(Notification.class));
         verify(eventStore).persist(evt);   // <-- NEW
+        assert captor.getValue().getTraceId() != null;
+        assert captor.getValue().getTraceId().length() == 32;
+    }
+
+    @Test
+    void stampsInboundTraceIdOnQueuedNotification() {
+        UUID eventId = UUID.randomUUID();
+        UUID appointmentId = UUID.randomUUID();
+        AppointmentChangedEvent evt = event(
+                eventId, appointmentId, UUID.randomUUID(),
+                AppointmentChangedEvent.EventType.UPDATED
+        );
+        when(repo.findByEventId(eventId)).thenReturn(Optional.empty());
+        when(easClient.getAppointment(appointmentId)).thenReturn(
+                CompletableFuture.completedFuture(
+                        new AppointmentDetails(appointmentId, "Dr. Smith", "2026-10-20", true)
+                )
+        );
+        when(repo.save(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        TraceContext.open(TraceContext.parseOrCreate(
+                "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"));
+
+        listener.handleEvent(evt);
+
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(repo).save(captor.capture());
+        assert captor.getValue().getTraceId().equals("4bf92f3577b34da6a3ce929d0e0e4736");
     }
 
     @Test
