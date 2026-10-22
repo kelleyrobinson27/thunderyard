@@ -211,4 +211,36 @@ class AppointmentEventListenerTest {
 
         assert CorrelationIds.current().equals("corr-inbound");
     }
+
+    @Test
+    void persistsTypedEventsWithoutQueuingSms() {
+        AppointmentReminderEvent reminder = new AppointmentReminderEvent(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                AppointmentReminderEvent.ReminderType.UPCOMING, Instant.now(), "test");
+        AppointmentCreatedEvent created = new AppointmentCreatedEvent(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), Instant.now(), "test");
+        AppointmentCancelledEvent cancelled = new AppointmentCancelledEvent(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                AppointmentCancelledEvent.CancelReason.SYSTEM, Instant.now(), "test");
+        AppointmentStatusChangedEvent status = new AppointmentStatusChangedEvent(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                AppointmentStatusChangedEvent.Status.SCHEDULED,
+                AppointmentStatusChangedEvent.Status.COMPLETED, Instant.now(), "test");
+        AppointmentConfirmationEvent confirmation = new AppointmentConfirmationEvent(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                AppointmentConfirmationEvent.ConfirmationType.PROVIDER_CONFIRMED, Instant.now(), "test");
+
+        listener.handleEvent(reminder);
+        listener.handleEvent(created);
+        listener.handleEvent(cancelled);
+        listener.handleEvent(status);
+        listener.handleEvent(confirmation);
+
+        verify(eventStore).persist(reminder);
+        verify(eventStore).persist(created);
+        verify(eventStore).persist(cancelled);
+        verify(eventStore).persist(status);
+        verify(eventStore).persist(confirmation);
+        verify(smsProducer, never()).publishSmsJob(any());
+    }
 }

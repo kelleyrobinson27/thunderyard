@@ -1,9 +1,12 @@
 #!/bin/bash
 #
-# Notification counters on /actuator/prometheus.
-# POSTs unique UPDATED events then scrapes:
+# What it hits:
+#   /actuator/health, /actuator/metrics, Prometheus notification counters.
+#
+# POSTs unique UPDATED / duplicate / CANCELLED then scrapes:
 #   notifications_queued_total, notifications_sent_total,
 #   notifications_suppressed_total, notifications_duplicated_total
+#   (failed / retried / delivered may be 0.0 until those paths run)
 # Kafka should be up so queued can become sent.
 
 set -u
@@ -86,6 +89,14 @@ CODE=$(post_changed "$CANCEL_EVENT" "$CANCEL_APPT" "$CANCEL_PATIENT" CANCELLED |
 record "CANCELLED" "$CODE" 200
 
 sleep 2
+
+echo "=== GET /actuator/health ==="
+HEALTH=$(curl -s --max-time 20 -o /dev/null -w "%{http_code}" "$BASE/actuator/health" || true)
+record "health" "$HEALTH" 200
+
+echo "=== GET /actuator/metrics ==="
+METRICS=$(curl -s --max-time 20 -o /dev/null -w "%{http_code}" "$BASE/actuator/metrics" || true)
+record "metrics catalog" "$METRICS" 200
 
 echo "=== GET /actuator/prometheus ==="
 PROM=$(curl -s --max-time 20 -o /dev/null -w "%{http_code}" "$BASE/actuator/prometheus" || true)

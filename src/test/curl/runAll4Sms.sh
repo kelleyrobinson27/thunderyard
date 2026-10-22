@@ -1,8 +1,9 @@
 #!/bin/bash
 #
-# SMS provider failure modes (needs Kafka, eas.stub=true).
-# HTTP 200 only means the event was accepted. Watch the worker log.
+# What it hits:
+#   SMS success / retryable timeout / permanent failure, plus POST /sms/callback 404.
 #
+# Needs Kafka and eas.stub=true. HTTP 200 only means the event was accepted.
 # Random patientId              -> send succeeds (SENT)
 # 00000000-0000-0000-0000-00000000aaa1 -> retryable timeout, Kafka retry, then DLQ
 # 00000000-0000-0000-0000-00000000aaa2 -> permanent false, FAILED, no requeue
@@ -76,6 +77,16 @@ PERM_APPT=$(new_uuid)
 post_changed "UPDATED success send" "$OK_EVENT" "$OK_APPT" "$OK_PATIENT"
 post_changed "UPDATED retryable SMS timeout" "$RETRY_EVENT" "$RETRY_APPT" "$RETRY_PATIENT"
 post_changed "UPDATED permanent SMS failure" "$PERM_EVENT" "$PERM_APPT" "$PERM_PATIENT"
+
+echo "=== POST /sms/callback unknown notificationId ==="
+UNKNOWN_NID=$(new_uuid)
+CODE=$(curl -s --max-time 20 -o /dev/null -w "%{http_code}" \
+  "${AUTH[@]}" \
+  -X POST "$BASE/sms/callback" \
+  -H "Content-Type: application/json" \
+  -d "{\"notificationId\":\"$UNKNOWN_NID\",\"correlationId\":\"corr-missing\",\"status\":\"DELIVERED\",\"providerCode\":\"OK\"}" \
+  || true)
+record "callback unknown notification" "$CODE" 404
 
 echo "Log checks (not asserted by curl):"
 echo "  success: Sending SMS correlationId=corr-$OK_EVENT"

@@ -12,6 +12,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -68,5 +69,24 @@ class SmsQueueProducerTest {
         ArgumentCaptor<SmsJob> jobCaptor = ArgumentCaptor.forClass(SmsJob.class);
         verify(kafka).send(eq(KafkaTopics.SMS_JOBS), any(), jobCaptor.capture());
         assertThat(jobCaptor.getValue().getCorrelationId()).isEqualTo("corr-from-http");
+    }
+
+    @Test
+    void wrapsKafkaSendFailure() {
+        @SuppressWarnings("unchecked")
+        KafkaTemplate<String, SmsJob> kafka = mock(KafkaTemplate.class);
+        when(kafka.send(any(), any(), any()))
+                .thenReturn(CompletableFuture.failedFuture(new RuntimeException("broker down")));
+        SmsQueueProducer producer = new SmsQueueProducer(kafka);
+
+        Notification notification = new Notification();
+        notification.setNotificationId(UUID.randomUUID());
+        notification.setEventId(UUID.randomUUID());
+        notification.setAppointmentId(UUID.randomUUID());
+        notification.setPatientId(UUID.randomUUID());
+
+        assertThatThrownBy(() -> producer.publishSmsJob(notification))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Failed to publish SMS job");
     }
 }

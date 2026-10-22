@@ -1,6 +1,8 @@
 #!/bin/bash
 #
-# Correlation ID on HTTP: echo X-Correlation-Id and persist it on the event.
+# What it hits:
+#   X-Correlation-Id echo on the response and GET /events?correlationId= persist.
+#
 # Kafka is not required for these checks (POST still queues SMS if the broker is up).
 
 set -u

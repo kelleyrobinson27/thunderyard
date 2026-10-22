@@ -1,9 +1,11 @@
 #!/bin/bash
 #
-# EAS contact-preference slice (eas.stub=true in application-local.yml).
+# What it hits:
+#   EAS opt-in vs reserved opt-out appointmentId.
+#
+# eas.stub=true in application-local.yml.
 # Random appointmentId -> canNotify=true, HTTP 200, look for Queued SMS job.
 # Reserved opt-out id  -> canNotify=false, HTTP 200, SUPPRESSED, no SMS job.
-#
 # OPT_OUT_APPOINTMENT_ID = 00000000-0000-0000-0000-00000000ffff
 
 set -u

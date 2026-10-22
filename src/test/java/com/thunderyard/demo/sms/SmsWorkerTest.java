@@ -108,4 +108,19 @@ class SmsWorkerTest {
 
         assert CorrelationIds.current() == null;
     }
+
+    @Test
+    void skipsWhenNotificationMissing() {
+        UUID id = UUID.randomUUID();
+        SmsJob job = SmsJob.builder()
+                .notificationId(id)
+                .correlationId("corr-missing")
+                .build();
+        when(repo.findById(id)).thenReturn(Optional.empty());
+
+        worker.handleSmsJob(job);
+
+        verify(provider, never()).sendSms(any());
+        verify(repo, never()).save(any());
+    }
 }

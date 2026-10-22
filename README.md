@@ -167,14 +167,15 @@ curl -u demo:demo -X POST http://localhost:8080/events/appointment-changed \
   }'
 ```
 
-Ready-made scripts in `src/test/curl/`:
+Curl suites in `src/test/curl/` (these are the only HTTP scripts):
 
-- `runAll1Http.sh` — ingest, validation, list, replay (200, or 500 if more than 50 events); Kafka not required
+- `runAll1Http.sh` — ingest every event type, validation 4xx, list (all / type / date / count), replay (200, or 500 if more than 50 events); Kafka not required
 - `runAll2Kafka.sh` — SMS queue path (CREATED / duplicate / UPDATED / CANCELLED); needs Kafka
 - `runAll3Eas.sh` — EAS opt-in vs reserved opt-out `appointmentId`
-- `runAll4Sms.sh` — SMS success vs retryable timeout vs permanent failure (needs Kafka)
-- `runAll5Metrics.sh` — scrape `/actuator/prometheus` for notification counters
+- `runAll4Sms.sh` — SMS success vs retryable timeout vs permanent failure, plus callback 404 (needs Kafka)
+- `runAll5Metrics.sh` — `/actuator/health`, `/actuator/metrics`, Prometheus notification counters
 - `runAll6Tracing.sh` — `X-Correlation-Id` echo + persist (`GET /events?correlationId=`)
+- `runAllEvents.sh` / `runAllAppointmentEvents.sh` — wrappers that run `runAll1Http.sh`
 
 ### Event log and replay
 
@@ -188,7 +189,7 @@ Ready-made scripts in `src/test/curl/`:
 | POST | `/events/replay/all` | Re-dispatch every stored event |
 | POST | `/events/replay/{type}` | Re-dispatch one type, e.g. `AppointmentChangedEvent` |
 
-Replay deserializes stored JSON and calls the listener again. It **aborts if the batch is larger than 50** (`IllegalStateException` → HTTP 500 today). Use type-scoped replay or trim the `events` table if you hit that guard (for example after `replaySafetyTest.sh`, which inserts 51 rows).
+Replay deserializes stored JSON and calls the listener again. It **aborts if the batch is larger than 50** (`IllegalStateException` → HTTP 500). `runAll1Http.sh` expects 500 when `GET /events/count` (or `?type=`) is over 50. Trim the `events` table if you need replay-all to return 200.
 
 ```bash
 curl -u demo:demo http://localhost:8080/events
@@ -243,13 +244,16 @@ Consumer group: `notification-service`. Multiple pods can share the group; idemp
 
 Unit and slice tests live under `src/test/java`:
 
-- `AppointmentEventListenerTest`
-- `EventStoreTest`, `EventControllerTest`, `EventPersistenceIntegrationTest`
-- `EasClientTest`
-- `SmsWorkerTest`, `DlqWorkerTest`, `DeliveryCallbackControllerTest`
+- `AppointmentEventListenerTest`, `AppointmentEventControllerTest`
+- `EventStoreTest`, `EventControllerTest`, `EventReplayServiceTest`, `EventReplayControllerTest`
+- `EventPersistenceIntegrationTest`
+- `EasClientTest`, `GlobalExceptionHandlerTest`
+- `SmsQueueProducerTest`, `SmsWorkerTest`, `DlqWorkerTest`, `SmsProviderClientTest`
+- `DeliveryCallbackControllerTest`
+- `NotificationMetricsTest`
 - `CorrelationIdsTest`, `CorrelationFilterTest`
 
-HTTP demos: `src/test/curl/*.sh`.
+HTTP demos: `src/test/curl/runAll*.sh`.
 
 ## Known gaps / next
 

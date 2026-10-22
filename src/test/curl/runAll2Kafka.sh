@@ -1,8 +1,9 @@
 #!/bin/bash
 #
-# Exercise the SMS Kafka queue boundary.
-# Needs: app on :8080 and Kafka on :9092.
+# What it hits:
+#   CREATED / duplicate eventId / UPDATED / CANCELLED SMS queue path.
 #
+# Needs: app on :8080 and Kafka on :9092.
 # CREATED/UPDATED  -> persist, queue sms-jobs (HTTP 500 if Kafka is down)
 # duplicate eventId -> 200, no second SMS (notification already saved)
 # CANCELLED        -> SUPPRESSED, no SMS job
