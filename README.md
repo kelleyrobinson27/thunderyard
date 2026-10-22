@@ -58,7 +58,7 @@ flowchart TB
 
 - JDK 21
 - PostgreSQL on `localhost:5432`
-- Docker Desktop (or another Compose runtime) for local Kafka
+- Docker Desktop (or another Compose runtime) for local Kafka (`./go.sh` or `go.bat`)
 - Optional: a mock EAS on `http://localhost:8081` (the client falls back if it is down)
 
 ## Docker: local Kafka
@@ -77,18 +77,13 @@ Docker Compose is the supported way to run Kafka for this demo. You do not need 
 
 ```bash
 # from the project root
-docker compose up -d
-docker compose ps
-# Cygwin / Git Bash: confirm the host port
-netstat -an | grep 9092
+./go.sh           # Cygwin / Git Bash: docker compose up, wait until healthy, list topics
+go.bat            # Windows CMD: same
+./go.sh down      # stop   (go.bat down)
+./go.sh down -v   # stop and drop Kafka volumes   (go.bat down -v)
 ```
 
-Wait until Kafka is healthy and `kafka-init` has listed the three topics. **Then** start (or restart) the Spring Boot app so consumers connect to a live broker. If you start the app first, Spring may not see the topics until you restart it.
-
-```bash
-docker compose down      # stop
-docker compose down -v   # stop and drop Kafka volumes
-```
+Wait until `go.sh` / `go.bat` prints `sms-jobs`, `sms-jobs-dlq`, and `appointment-events`. **Then** start (or restart) the Spring Boot app so consumers connect to a live broker. If you start the app first, Spring may not see the topics until you restart it.
 
 Postgres is not in Compose; it still runs on the host as below.
 
@@ -98,13 +93,26 @@ Create the database and role (local demo only):
 
 ```sql
 CREATE DATABASE thunderyard;
-CREATE USER thunderyard_user WITH PASSWORD 'thunderyard_user';
+CREATE USER thunderyard_user WITH PASSWORD 'putYourPasswordHere';
 GRANT ALL PRIVILEGES ON DATABASE thunderyard TO thunderyard_user;
+\c thunderyard
+GRANT ALL ON SCHEMA public TO thunderyard_user;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO thunderyard_user;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO thunderyard_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO thunderyard_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO thunderyard_user;
 ```
 
-On PostgreSQL 15+, also grant schema rights on `thunderyard` (often `\c thunderyard` then `GRANT ALL ON SCHEMA public TO thunderyard_user;`).
+To start over (wipe ingest/replay and notification rows, then **restart the app** so Hibernate recreates the tables):
 
-JDBC settings live in `src/main/resources/application.yml`. The active profile is `local`; the datasource password is overridden in `application-local.yml`.
+```sql
+\c thunderyard
+DROP TABLE IF EXISTS notifications;
+DROP SEQUENCE IF EXISTS notifications_id_seq;
+DROP TABLE IF EXISTS events;
+```
+
+JDBC settings live in `src/main/resources/application.yml`. The active profile is `local`; the datasource password is overridden in `application-local.yml` (must match the role password above).
 
 Hibernate creates and updates tables. The important ones:
 
@@ -113,7 +121,7 @@ Hibernate creates and updates tables. The important ones:
 
 ## Run
 
-Start Kafka first (`docker compose up -d`), then:
+Start Kafka first (`./go.sh` or `go.bat`), then:
 
 ```bash
 ./mvnw test
